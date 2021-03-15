@@ -1,0 +1,622 @@
+#!/usr/bin/env python3
+# vim: expandtab shiftwidth=4 softtabstop=4
+
+### CTF-specific parameters ###
+
+FLAG_RE = r"OOO{[^}]*}\Z"                   # "normal" flag format
+SERVICE_NAME_RE = r"[a-z][a-z0-9-]+\Z"      # so it's the same in Kubernetes, DNS, git, ...
+PUBLIC_FILENAME_RE = r"[a-zA-Z0-9_.@-]+\Z"  # mostly for sanity in setting env vars & co.
+NAME_PREFIX = "dc2021q"                     # for github, image names, etc.
+INTERNAL_SUBDOMAIN = ".lb.31337.ooo"        # for test_deployed (internal by default)
+PUBLIC_SUBDOMAIN = ".challenges.ooo"        # for test_deployed public
+GITHUB_ORG = "o-o-overflow"                 # Used to enforce the repo name -- we found it useful to have the same name everywhere
+K8S_MASTER = 'root@master.k8s.31337.ooo'    # Used to delete pods on './tester deploy'
+POW_DETECTION_STRING = b"(Pssst, http://oooverflow.io/pow.py)"   # If detected, will test on port+1 (which is expected to have no POW req.)
+REGISTRY = "registry.31337.ooo:5000"
+
+# A JSON updated via github webhooks -- this allows the tester to live in copy in each repo, and yet be kept up to date with the template
+SELFUPDATE_INFO_URL = "https://jacopo.cc/ooo_latest_tester.json"
+
+SHORTREAD_ALLOWED_DIFF = 2    # Accept this number of remaining processes after the short-read test (override: shortread_allowed_diff: -1)
+
+
+
+import concurrent.futures
+import urllib.request
+import subprocess
+import argparse
+import hashlib
+import logging
+import tarfile
+import socket
+import shlex
+import json
+import yaml
+import time
+import sys
+import re
+import os
+import traceback
+
+logging.basicConfig()
+_LOG = logging.getLogger("OOO")
+_LOG.setLevel("DEBUG")
+try:
+    import coloredlogs
+    coloredlogs.install(logger=_LOG, level=_LOG.level)
+except ImportError:
+    pass
+
+service_dir = os.path.dirname(__file__)
+
+dsystem = os.system  # But see cmdline options
+def system_without_stdout(cmd):
+    p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
+    out, _ = p.communicate()
+    if p.returncode != 0:
+        _LOG.warning("Command %s failed (%d). Stdout was: %s", cmd, p.returncode, out)
+    return p.returncode
+
+
+def file_sha256(filename):
+    with open(filename, "rb") as mf:
+        return hashlib.sha256(mf.read()).hexdigest().lower()
+
+
+def grep_for_exposed_port():
+    # NOTE: should match the logic in chalmanager
+    service_Dockerfile = os.path.join(service_dir, 'service', 'Dockerfile')
+    expose_grep = subprocess.check_output(['egrep','-i','^[[:space:]]*expose',service_Dockerfile]).strip()
+    assert len(expose_grep.splitlines()) == 1, "More than one EXPOSE line in the service Dockerfile? Found: {}".format(expose_grep)
+    m = re.match(br'\s*EXPOSE\s*([0-9]+)(/(tcp|udp))?', expose_grep, re.I)
+    assert m, "I didn't understand the expose statement in the service Dockerfile ('{}')".format(expose_grep)
+    ret = int(m.group(1))
+    assert ret != 22
+    return ret
+
+
+def update_myself():
+    if not SELFUPDATE_INFO_URL:
+        return
+    _LOG.info("Checking for tester updates...")
+    my_sha256 = file_sha256(__file__)
+    try:
+        with urllib.request.urlopen(SELFUPDATE_INFO_URL, timeout=5) as u:
+            newinfo = json.load(u)
+        if newinfo['tester_sha256'].lower() == my_sha256 or newinfo.get("ignore", False):
+            return
+        _LOG.critical("THERE IS A NEW tester SCRIPT (or yours is different) -- please ./apply_template_commits.sh")
+        if 'commit_id' in newinfo:
+            _LOG.info("The last upstream tester commit was %s", newinfo['commit_id'])
+        if 'commit_unixdate' in newinfo:
+            _LOG.info("The last upstream tester commit happened at " +
+                    time.strftime('%a, %d %b %Y %H:%M:%S %Z', time.localtime(newinfo['commit_unixdate'])))
+        if ('CI' in os.environ) or not (sys.stdin.isatty() and sys.stdout.isatty() and sys.stderr.isatty()):
+            _LOG.warning("Not interactive, I won't ask to upgrade")
+            return
+        if input("Continue without updating? ") in ['y','Y','yes','YES','Yes']:
+            _LOG.info("OK. BTW, you can run me with --no-self-update if you don't want this check to happen.")
+            return
+        print("Good choice :) Plase run ./apply_template_commits.sh")
+        print("In a pinch, run with --no-self-update")
+        sys.exit(11)
+    except Exception as e:
+        _LOG.warning("Skipping self-update, got an exception: %s %s", type(e), str(e))
+
+
+def validate_git():  # Called as part of validate_yaml
+    if not GITHUB_ORG:
+        _LOG.debug("No GITHUB_ORG specified, skipping the repo name check")
+        return
+    if not os.path.isdir(os.path.join(service_dir,'.github','workflows')):
+        _LOG.critical("No github test? Just copy the .github dir from the template")
+    if not os.path.exists(os.path.join(service_dir, ".git")):
+        _LOG.warning("I don't think I am in git -- skipping the github name check")
+        return
+    remotes_p = subprocess.run("git -C {} remote -v show -n|grep push|grep -oE '\S+github.com\S+'|grep '{}'".format(
+            shlex.quote(service_dir), GITHUB_ORG),
+            shell=True, stdout=subprocess.PIPE, cwd=service_dir, universal_newlines=True)
+    if remotes_p.returncode != 0 or not remotes_p.stdout:
+        _LOG.warning("I don't see github among the remotes -- skipping the github name check")
+        return
+    def remote_ok(remote):
+        if ('2020' in remote) or ('2019' in remote) or ('2018' in remote):
+            _LOG.debug("Probably an old repo, skipping github repo name check")
+            return True
+        if remote.endswith('.git'):
+            remote = remote[:-4]
+        return remote.endswith(GITHUB_ORG + '/' + NAME_PREFIX + "-" + service_conf['service_name'])
+    if not any(remote_ok(r) for r in remotes_p.stdout.splitlines()):
+        _LOG.critical("The github repo name does not conform to the format! I'm expecting %s-(service_name as in yaml) Either change the name or ask around. Remotes found: %s", NAME_PREFIX, remotes_p.stdout)
+        if not service_conf.get('violates_github_format'):
+            assert False, "you violated the github name format!"
+
+
+def get_healthcheck_info():
+    hc = [ k for k in service_conf.keys() if k.startswith('healthcheck_') ]
+    tcp_send = None
+    if 'healthcheck_tcp_send' in hc:
+        tcp_send = service_conf['healthcheck_tcp_send'].encode('ascii','strict')
+        hc.remove('healthcheck_tcp_send')
+    if not hc: return None
+    assert len(hc) == 1, "More than one healthcheck_xxx line?!?"
+    protocol = hc[0][len('healthcheck_'):]
+    if protocol not in ('tcp','http'):
+        _LOG.critical("Are you sure protocol %s is supported for healthchecks?", protocol)
+    rgx = ""
+    if service_conf[hc[0]]:
+        rgx = service_conf[hc[0]].encode('ascii','strict')  # TODO: matches reality?
+    return protocol, re.compile(rgx), tcp_send
+
+def simulate_healthcheck(protocol, regex, tcp_send, host, port):
+    # Ideally match https://github.com/prometheus/blackbox_exporter
+    # + infa's roles/blackbox_exporter/templates/config.yml.j2
+    _LOG.info("Simulating a %s healthcheck %s:%d -> regex %s", protocol, host, port, repr(regex))
+    if protocol not in ("tcp","http"):
+        _LOG.warning("TODO: missing %s healthcheck simulation", protocol)
+        return None
+    try:
+        if protocol == 'http':
+            assert tcp_send is None
+            with urllib.request.urlopen('http://{}:{}/'.format(host,port), timeout=5) as u:
+                if u.getcode() != 200:
+                    _LOG.critical('Got %d %s [!= 200] for %s (info: %s)',
+                            u.getcode(), u.reason, u.geturl(), u.info())
+                else:
+                    _LOG.debug('Got %d %s for %s',
+                            u.getcode(), u.reason, u.geturl())
+                rdata = u.read()
+        else:
+            with socket.create_connection((host,port), timeout=5) as c:
+                c.settimeout(5)
+                if tcp_send is not None:
+                    _LOG.debug("Sending %s ...", tcp_send.decode('ascii','backslashreplace'))
+                    c.sendall(tcp_send)
+                if regex.pattern:  # Empty healthcheck_tcp => just try connecting
+                    rdata = c.recv(1024)  # TODO: loop over received lines instead
+                    _LOG.debug("TCP healthcheck received: %s", rdata.decode('ascii','backslashreplace'))
+        if regex.pattern:  # Empty healthcheck_tcp => just try connecting
+            rdata_msgstr = rdata.decode('ascii','backslashreplace')
+            m = regex.search(rdata)
+            if m:
+                _LOG.debug("Matched: %s", str(m))
+            else:
+                _LOG.error("Simulated healthcheck failed -- received %s (didn't match %s)", rdata_msgstr, repr(regex))
+                return False
+        _LOG.info("Simulated healthcheck passed, good!")
+        return True
+    except Exception as e:
+        _LOG.critical("Got an exception while simulating a healthcheck on (%s:%d) -> %s %s", host, port, type(e), str(e))
+
+
+
+def validate_game_network_info():  # Called as part of validate_yaml
+    if 'game_network_info' not in service_conf:
+        _LOG.warning("game_network_info not specified: THIS SHOULD ONLY HAPPEN FOR OFFLINE SERVICES")
+        _LOG.debug("^^^ If that's wrong just copy the defaults from the template")
+        assert get_healthcheck_info() is None, "Can't have healthchecks if offline!"
+        return None, None
+    assert "host" in service_conf["game_network_info"], "Missing game_network_info.hostname -- should normally be 'default'"
+    host = service_conf["game_network_info"]["host"]
+    assert "port" in service_conf["game_network_info"]
+    port = service_conf["game_network_info"]["port"]
+    if "hidden" in service_conf["game_network_info"]:
+        assert service_conf["game_network_info"]["hidden"]
+        _LOG.debug("The public description will NOT include the hostname and port")
+    else:
+        _LOG.debug("The public description will automatically include the hostname and port")
+    if port == "guess":
+        port = grep_for_exposed_port()
+        _LOG.info("Guessed port for your service: %d", grep_for_exposed_port())
+    else:
+        port = int(port) # Put 'guess' if you want us to grep for EXPOSE
+        assert port != 22
+    if host == "default":
+        _LOG.debug("You'll be using the default deployment -- good. Remember to ./tester test_deployed")
+        hc = get_healthcheck_info()
+        if not hc:
+            _LOG.warning("Your service has no healthcheck -- this should happen only if offline or custom-deployed")
+        else:
+            _LOG.debug("You have suggested as healthcheck: %s", str(get_healthcheck_info()))
+        return host,port
+    assert get_healthcheck_info() is None, "Can't have healthchecks if custom-deployed! If using our infrastructure, put host: default"
+    try:
+        ip = socket.gethostbyname(host)
+        _LOG.debug("Your custom host %s resolves to %s", host, ip)
+        c = socket.create_connection((host,port), timeout=5)
+        _LOG.info("Good, I TCP-connected to your custom %s:%d", host, port)
+        c.close()
+    except Exception as e:
+        _LOG.critical("Got an exception while trying to TCP-connect to your custom game_network_info (%s:%d) -> %s %s", host, port, type(e), str(e))
+    return host,port
+
+
+def validate_yaml():
+    _LOG.info("Validating yaml...")
+    assert 'service_name' in service_conf, "no service name specified"
+    if 'template' in service_conf['service_name'] and not os.path.abspath(service_dir).endswith('template'):
+        _LOG.critical("Looks like you didn't change the service_name from the template (it's: %s)", service_conf['service_name'])
+        assert False, "you must change the service_name"
+    if not re.match(SERVICE_NAME_RE, service_conf['service_name']):
+        _LOG.critical("Service name %s is unusual, will create issues with docker & co. -- can you change it? Regex: %s", service_conf['service_name'], SERVICE_NAME_RE)
+        if not service_conf['violates_name_format']:
+            assert False, "you violated the name format! Either change the name or ask around"
+    validate_git()
+    assert 'flag' in service_conf, "no service flag specified"
+    if 'test flag' in service_conf['flag']:
+        _LOG.critical("REMEMBER TO CHANGE THE FLAG: %s looks like the test flag", service_conf['flag'])
+    if not re.match(FLAG_RE, service_conf['flag']):
+        _LOG.critical("FLAG %s DOES NOT CONFORM TO THE FLAG FORMAT", service_conf['flag'])
+        if not service_conf['violates_flag_format']:
+            assert False, "you violated the flag format!"
+    validate_game_network_info()
+
+    if 'request_memory' in service_conf:
+        assert re.match(r"[0-9]+[bkmg]\Z", service_conf['request_memory']), "request_memory example: 512m"
+    else:
+        _LOG.error("You did not specify request_memory -- defaulting to 512 MB during tests")
+    if 'limit_memory' in service_conf:
+        assert re.match(r"[0-9]+[bkmg]\Z", service_conf['limit_memory']), "limit_memory example: 512m"
+    else:
+        _LOG.error("You did not specify limit_memory -- defaulting to 512 MB during tests")
+
+    assert service_conf['type'] in ('normal','jeopardy') # 'king_of_the_hill'
+
+
+    for k in service_conf.keys():
+        kregex = "^" + re.escape(k) + ":"
+        ymlpath = os.path.join(service_dir, "info.yml")
+        kgrepc = subprocess.check_output(['egrep','-c',kregex, ymlpath], universal_newlines=True)
+        if int(kgrepc) != 1:
+            _LOG.critical("Looks like '%s' is present more than once in the info.yml!", k)
+            subprocess.run(['egrep',kregex, ymlpath])
+            sys.exit(4)
+
+
+
+
+
+def build_service():
+    if os.path.exists(os.path.join(service_dir, "service", "Dockerfile")):
+        _LOG.info("Building service image...")
+        build_args = ""
+        if service_conf.get('copy_flag_using_build_arg'):
+            build_args = "--build-arg THE_FLAG='%s'" % service_conf["flag"]
+        assert dsystem("docker build %s -t %s %s/service" % (build_args, image_tag, service_dir)) == 0, "service docker image build failed"
+    else:
+        _LOG.warning("no dockerfile found for service...")
+
+def build_interactions():
+    if os.path.exists(os.path.join(service_dir, "interaction", "Dockerfile")):
+        _LOG.info("Building interaction image...")
+        assert dsystem("docker build -t %s %s/interaction" % (interaction_image_tag, service_dir)) == 0, "interaction docker image build failed"
+
+def _start_container():
+    _stop_container()
+    limits = " -m " + str(service_conf.get('limit_memory', '512m'))
+    limits += " --memory-reservation " + str(service_conf.get('request_memory', '512m'))
+    # Note: in finals we add -i to keep stdin open, perhaps we could do it here too (for the interaction container)
+    assert dsystem("docker run %s --name %s --rm -d %s" % (limits, container_tag, image_tag)) == 0, "service container failed to start"
+def _stop_container():
+    dsystem("docker kill %s 2>/dev/null >/dev/null | true" % container_tag)
+    dsystem("docker rm %s 2>/dev/null >/dev/null | true" % container_tag)
+
+def launch_service():
+    _LOG.debug("starting container")
+    _start_container()
+    time.sleep(1)
+    container_config = json.loads(subprocess.check_output("docker inspect %s" % container_tag, shell=True).decode('utf-8'))
+    ip_address = container_config[0]['NetworkSettings']['Networks']['bridge']['IPAddress']
+    port = list(container_config[0]['Config']['ExposedPorts'].keys())[0].split("/")[0]
+    _LOG.debug("network endpoint: %s:%s", ip_address, port)
+    return ip_address, port
+
+def test_service(ip_address, port, exploit=True, host_net=False):
+    _LOG.info("Testing container...")
+
+    _LOG.info("launching interaction container")
+    interaction_container = subprocess.check_output("docker run %s --rm -i -d %s" % ("--net=host" if host_net else "", interaction_image_tag), shell=True).strip().decode('utf-8')
+
+    def _run_interaction(script):
+        if os.path.basename(script).startswith("exploit") and not exploit:
+            _LOG.info("skipping exploit script %s", script)
+            return
+        _LOG.info("launching %s", script)
+
+        try:
+            output = subprocess.check_output("docker exec %s %s %s %s" % (interaction_container, script, ip_address, port), shell=True,
+                    stderr=None if _LOG.getEffectiveLevel() < logging.WARNING else subprocess.STDOUT)
+            _LOG.debug("%s -out-> %s", script, output)
+        except subprocess.CalledProcessError as e:
+            _LOG.critical("ERROR: %s returned %d -- full cmd: %s output: %s", script, e.returncode, e.cmd, e.output)
+            if os.path.basename(script).startswith("exploit"):
+                if service_conf['flag'].encode('utf-8') in output:
+                    _LOG.critical("Despite the error, the exploit did actually print the flag, so... kinda worked?")
+            sys.exit(e.returncode)
+
+        if os.path.basename(script).startswith("exploit"):
+            _LOG.info("... checking for the flag")
+            assert service_conf['flag'].encode('utf-8') in output, "exploit %s did not print the flag"%script #pylint:disable=unsupported-membership-test
+
+    _LOG.info("launching interaction scripts")
+    interaction_files = service_conf['interactions']
+    for f in interaction_files:
+        _run_interaction(f)
+
+    _LOG.info("STRESS TEST TIME")
+    n = 2
+    old_level = _LOG.level
+    while n <= service_conf['concurrent_connections']:
+        _LOG.info("stress testing with %d concurrent connections!", n)
+        _LOG.setLevel(max(logging.WARNING, old_level))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=n) as pool:
+            results = pool.map(_run_interaction, (interaction_files*n)[:n])
+        try:
+            for result in results:
+                pass
+        except Exception as e:
+            _LOG.error('One iteration returns an exception: %s' % str(e))
+            _LOG.error(traceback.format_exc())
+            sys.exit(1)
+
+        _LOG.setLevel(old_level)
+
+        n *= 2
+
+    _LOG.info("SHORT-READ SANITY CHECK")
+    allowed = service_conf.get('shortread_allowed_diff', SHORTREAD_ALLOWED_DIFF)
+    if SHORTREAD_ALLOWED_DIFF >= 0 and allowed >= 0:
+        start_num_procs = len(subprocess.check_output("docker exec %s ps aux" % container_tag, shell=True).splitlines())
+        assert os.system('docker run --rm ubuntu bash -ec "for i in {1..128}; do echo > /dev/tcp/%s/%s; done"' % (ip_address, port)) == 0
+        _LOG.info("waiting for service to clean up after short reads")
+        time.sleep(15)
+        final_num_procs = len(subprocess.check_output("docker exec %s ps aux" % container_tag, shell=True).splitlines())
+        assert final_num_procs < (start_num_procs + allowed), "your service did not clean up after short reads -- starting procs = {sp} final={fp}".format(sp=start_num_procs, fp=final_num_procs)
+    else:
+        _LOG.info("The short-read test is disabled")
+
+    _LOG.info("stopping interaction container")
+    dsystem("docker kill %s" % interaction_container)
+
+    hck = get_healthcheck_info()
+    if hck is not None:
+        protocol, regex, tcp_send = hck
+        simulate_healthcheck(protocol, regex, tcp_send, ip_address, int(port))
+
+
+
+def build_bundle():
+    # Do we ever actually use this tgz?
+    public_bundle_path = os.path.join(service_dir, "public_bundle.tar.gz")
+    try:
+        os.remove(public_bundle_path)
+    except FileNotFoundError:
+        pass
+    with tarfile.open(public_bundle_path, "w:gz") as tar:
+        list_public_files(tar=tar)
+    subprocess.check_output(["tar", "tvzf", public_bundle_path])
+    _LOG.info("Created public_bundle.tar.gz -- but remember that the scoreboard is updated differently!")
+
+
+def list_public_files(tar=None):
+    if not ('public_files' in service_conf and service_conf['public_files']):
+        print("")
+        print("")
+        print("^^^ \033[36m No Public Files Found \033[0m")
+        print("")
+        print("")
+        return ""
+
+    _LOG.info("Looking at public files...")
+
+    ret = {}  #  basename -> sha256
+    for f in service_conf['public_files']:
+        bname = os.path.basename(f)  # chalmanager will only use the basename
+        _LOG.warning("Public file: %s <-- %s", bname, f)
+        assert os.path.exists(f), "Public file not found: {} -- remember that all public files must be pre-built and checked into git".format(f)
+        assert os.path.isfile(f), "Only regular files for the public: {}".format(f)
+        assert not os.path.islink(f), "No symlinks for the public: {}".format(f)
+        assert bname not in ret, "There was already a public file named {} (public files go by basename only)".format(f)
+        assert re.match(PUBLIC_FILENAME_RE, bname), "Weird name for a public file: {} -- can it match '{}' instead?".format(bname, PUBLIC_FILENAME_RE)
+        ret[bname] = file_sha256(f)
+        if tar:
+            def anonymize(t):
+                t.mtime = t.uid = t.gid = 0; t.uname = t.gname = ""; t.pax_headers.clear()
+                return t
+            tar.add(f, arcname=bname, filter=anonymize)
+
+    _LOG.warning("^^^^ PLEASE VERIFY THAT THE PUBLIC FILES ARE CORRECT ^^^^")
+    return ret
+
+
+
+def test_deployed(host, do_exploits=None, port=None, host_net=False):
+    test_exploits = False
+    if do_exploits is None:
+        if not (sys.stdin.isatty() and sys.stdout.isatty() and sys.stderr.isatty()):
+            _LOG.warning("Not interactive, I won't ask to exploit")
+        elif input("Also run exploit scripts? ") in ['y','Y','yes','YES','Yes']:
+            _LOG.info("OK. will do.")
+            test_exploits = True
+    else:
+        test_exploits = do_exploits
+
+    if not host or not port:
+        yaml_host, yaml_port = validate_game_network_info()
+
+    if port is None:
+        port = yaml_port
+    assert port, "No game_network_info?!? Then it's an offline service! See the template."
+
+    if host is None:
+        host = yaml_host
+        assert host not in ('lb','public')  # Only "default" is valid in info.yaml
+    if host in ("lb","default"):  # Internal load-balancer by default
+        assert INTERNAL_SUBDOMAIN.startswith('.')
+        host = service_name + INTERNAL_SUBDOMAIN
+    elif host == "public":
+        assert PUBLIC_SUBDOMAIN.startswith('.')
+        host = service_name + PUBLIC_SUBDOMAIN
+
+    try:
+        fyi_ip = socket.gethostbyname(host)  # Just a courtesy check, scripts get it as-is
+        _LOG.debug("FYI: %s -> %s", host, fyi_ip)
+    except Exception as e:
+        _LOG.critical("I couldn't gethostbyname(%s) -> %s %s", host, type(e), str(e))
+        _LOG.debug("I'll continue but... most likely things will fail")
+
+    try:
+        with socket.create_connection((host,port), timeout=5) as c:
+            c.settimeout(3)
+            rdata = c.recv(100)
+        if POW_DETECTION_STRING in rdata:
+            _LOG.info("POW detected, I will test on port + 1 = %d + 1 = %d", port, port+1)
+            port += 1
+            assert PUBLIC_SUBDOMAIN not in host, "TODO: solve pow/backdoor to test public endpoints"
+    except Exception as e:
+        _LOG.info("POW auto-detection timed-out, assuming no POW (%s %s)", type(e), e)
+
+    global SHORTREAD_ALLOWED_DIFF  # TODO: ps aux using kubectl
+    SHORTREAD_ALLOWED_DIFF = -1  # TODO: ps aux using kubectl
+    _LOG.info("Testing deployed version on %s:%d (%s exploits)",
+            host, port, 'WITH' if test_exploits else 'without')
+    test_service(host, port, exploit=test_exploits, host_net=host_net)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--no-self-update", action="store_true", help="No self-update remote check")
+    parser.add_argument("--log-level", metavar='LVL', help="WARNING will also sink docker output. Default: DEBUG")
+    parser.add_argument("--use-cwd", action="store_true", help="Use CWD instead of script location for service directory")
+    parser.add_argument("--force-color", action="store_true", help="Force color even if not on a TTY (mainly for github")
+    parser.add_argument("cmds", metavar='CMD...', nargs=argparse.REMAINDER, help="Usual tester stuff: nothing / bundle, build, test, launch, test_deployed, deploy, ...")
+
+    args = parser.parse_args()
+    if args.force_color:
+        coloredlogs.install(logger=_LOG, level=_LOG.level, isatty=True)
+    if args.log_level:
+        _LOG.setLevel(args.log_level)
+    if _LOG.getEffectiveLevel() >= logging.WARNING:
+        dsystem = system_without_stdout
+
+    if not args.no_self_update:
+        update_myself()
+
+    if args.use_cwd:
+        service_dir = os.getcwd()
+
+    _LOG.info("USING YAML: %s/info.yml", service_dir)
+    with open(os.path.join(service_dir, "info.yml")) as yf:
+        service_conf = yaml.safe_load(yf)
+    service_name = service_conf['service_name']
+    _LOG.info("SERVICE ID: %s", service_name)
+
+    image_tag = NAME_PREFIX + ":" + service_name     # also see deploy -- registry names are different
+    interaction_image_tag = image_tag + '-interaction'
+    container_tag = "running-%s" % service_name
+
+    validate_yaml()
+
+    assert not any(('--' in c) for c in args.cmds)   # XXX: import the subparser stuff from the finals' tester
+    sys.argv = [sys.argv[0]] + args.cmds
+    arg = sys.argv[1] if len(sys.argv) >= 2 else ""
+    if arg == 'bundle':
+        build_bundle()
+    elif arg == 'list_public_files':
+        list_public_files()
+    elif arg == 'build':
+        build_service()
+        build_interactions()
+        list_public_files()
+    elif arg == 'test':
+        if len(sys.argv) == 2:
+            _ip_address, _port = launch_service()
+            test_service(_ip_address, _port)
+        else:
+            port = sys.argv[3] if len(sys.argv)>=4 else grep_for_exposed_port()
+            test_exploits = not((len(sys.argv)>=5) and (sys.argv[4] == 'noexploit'))
+            test_service(sys.argv[2], int(port), exploit=test_exploits)
+    elif arg == 'test_deployed':
+        # ./tester test_deployed [[no]exploit [host [port [host_net]]]]
+        #                                      ^ special host names: lb, public
+        #                                            ^ special port: pow (guessed_port+1)
+        build_interactions()
+        test_exploits = None
+        if len(sys.argv) >= 3:
+            assert sys.argv[2] in ('exploit','noexploit')
+            test_exploits = (sys.argv[2] == 'exploit')
+        host = sys.argv[3] if len(sys.argv) >= 4 else None
+        force_port = None
+        if len(sys.argv) >= 5:
+            if sys.argv[4] == 'pow':
+                force_port = grep_for_exposed_port()+1
+                _LOG.debug("POW-less port = exposed_port+1 = %d+1 = %d", force_port-1, force_port)
+            else:
+                force_port = int(sys.argv[4])
+        host_net = False
+        if len(sys.argv) >= 6:
+            assert sys.argv[5] == 'host_net'
+            host_net = True
+        test_deployed(host, test_exploits, port=force_port, host_net=host_net)
+        if len(sys.argv) < 4:
+            _LOG.debug("If applicable, I suggest to also run:")
+            _LOG.debug("  ./tester test_deployed noexploit public")
+            _LOG.debug("  ./tester test_deployed noexploit INDIVIDUAL_POD_IPs FORWARDED_PORT host_net")
+    elif arg == 'launch':
+        build_service()
+        try:
+            _ip_address, _port = launch_service()
+            print("")
+            print("SERVICE RUNNING AT: %s %s" % (_ip_address, _port))
+            print("nc %s %s" % (_ip_address, _port))
+            print("./tester test %s %s" % (_ip_address, _port))
+            print("%s:%s" % (_ip_address, _port))
+            input()
+        finally:
+            _stop_container()
+    elif arg == 'deploy':
+        rebuild_first = False
+
+        if ('CI' in os.environ) or not (sys.stdin.isatty() and sys.stdout.isatty() and sys.stderr.isatty()):
+            _LOG.info("Not interactive, I won't ask to build first")
+        elif len(sys.argv) >= 3 and sys.argv[2] == "rebuild":
+            rebuild_first = True
+        elif len(sys.argv) >= 3 and sys.argv[2] == "no-rebuild":
+            pass
+        elif input("Do you want to rebuild first? ") in ['y','Y','yes','YES','Yes']:
+            rebuild_first = True
+
+        if rebuild_first:
+            build_service()
+
+        assert REGISTRY, "Missing REGISTRY setting"
+        tagcmd = "docker tag %s:%s %s/%s-%s:latest" % (NAME_PREFIX, service_name.lower(), REGISTRY, NAME_PREFIX, service_name.lower())
+        print(tagcmd)
+        assert dsystem(tagcmd) == 0
+        pushcmd = "docker push %s/%s-%s:latest" % (REGISTRY, NAME_PREFIX, service_name.lower())
+        print(pushcmd)
+        assert dsystem(pushcmd) == 0
+        print()
+
+        list_public_files()
+
+        if K8S_MASTER:
+            _LOG.warning("Killing pods...")
+            sshcmd = ['ssh','-t',K8S_MASTER,"kubectl delete pod --all -n " + service_conf['service_name'].lower()]
+            _LOG.warning("Running %s", ' '.join(shlex.quote(x) for x in sshcmd))
+            subprocess.check_call(sshcmd)
+        else:
+            _LOG.error("You'll have to refresh the deployed containers manually")
+
+        _LOG.warning("IF YOUR SERVICE IS ALREADY ON THE SCOREBOARD: yell to update the public files there")
+        _LOG.info("If it's a new service: ask it to be added to Kubernetes")
+    else:
+        assert len(sys.argv) == 1, "Unknown command '{}', try --help".format(sys.argv[1])
+        try:
+            build_service()
+            build_interactions()
+            _ip_address, _port = launch_service()
+            test_service(_ip_address, _port)
+            build_bundle()
+        finally:
+            _stop_container()

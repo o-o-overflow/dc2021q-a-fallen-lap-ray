@@ -1,0 +1,92 @@
+# Base service info for the scoreboard ########################################
+service_name: "template"
+description: "This is a template service."
+tags:
+  - pwn
+  - reversing
+authors:
+  - author1
+  - author2
+
+# Flag info
+violates_flag_format: false         # if this is not "true", the flag is verfied against the flag format
+flag: "OOO{this is a test flag}"    # change it!
+copy_flag_using_build_arg: True     # Optionally: pass in THE_FLAG=(the flag above) using --build-arg (allows variable flags if desired for testing)
+
+# How players will connect to your service.
+# REMOVE THIS IF YOUR SERVICE HAS NO NETWORK COMPONENT.
+# In the rare case that 'default' and 'guess' are not OK, you can specify your own values.
+# See the tester global constants for the default values.
+game_network_info:
+    host: default
+    port: guess
+
+
+# In quals this can only be 'jeopardy' (or `normal`, with the same meaning)
+type: jeopardy
+
+
+
+# Build and testing info ######################################################
+
+
+# These are the files that will be "public" to the teams via the scoreboard.
+# The paths are relative to the repository
+# They are published manually. IF YOU CHANGE THEM DURING THE GAME YELL!
+public_files:
+  - service/service
+  - service/src/config.py
+
+
+# Test scripts are heavily encouraged.
+# All scripts should exit 0 if nothing went wrong.
+# Scripts are automatically determined to be exploit scripts if they start with the word "exploit".
+# Exploit scripts must output the flag using "FLAG: <FLAG>" and exit with 0 if the flag was captured correctly. 
+# The paths are absolute in the `interaction` docker container.
+interactions:
+  - /exploit1.py
+  - /exploit2.sh
+  - /check1.py
+  - /check2.sh
+
+
+# It's strongly suggested to have a healthcheck regex
+# The infrastructure will periodically connect and alert if it doesn't match anymore
+# The tester will also simulate this process (once).
+#
+# Example: healthcheck_tcp: awesome chall
+#          healthcheck_tcp_send: some intial command
+# Example: healthcheck_http: Author Login
+healthcheck_tcp: awesome chall
+
+
+
+# Resources ###################################################################
+
+
+# This is the number of concurrent connections that a container should be able to handle.
+# Also see xinetd's instances parameter
+concurrent_connections: 64
+
+# Resource limits that will go in k8s
+# request_xxx is used for scheduling (overcommitting)
+# These should mesh with the xinetd's rlimit_as and number of concurrent instances
+request_memory: 512m
+limit_memory: 512m
+
+
+
+# Not supported by the tester, but used by the infrastructure #################
+
+# Spawn N containers behind the load balancer
+# replicas * instances should allow everyone to play
+replicas: 5
+
+# Analogous to limit_memory / request_memory
+# limit_cpu / request_cpu
+
+# Transparent Proof-Of-Work if necessary
+# pow: True
+# pow_level: 22
+
+# max_pids_per_instance: 200    # Protects against fork-bombs that take down the k8s node
