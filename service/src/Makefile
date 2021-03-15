@@ -10,7 +10,6 @@ BUILDDIR = build
 
 FORCE = $(wildcard *.force)
 PROGS = $(FORCE:%.force=$(BUILDDIR)/%)
-TRAP_PROGS = $(FORCE:%.force=$(BUILDDIR)/trap/%)
 
 # If the platform is not darwin (Mac), the use the -lrt flag (needed on linux)
 ifneq (,$(findstring Darwin,$(PLATFORM)))
@@ -19,7 +18,6 @@ else
 endif
 
 EXE    = $(BUILDDIR)/manchester
-TRAP_EXE = $(BUILDDIR)/trap/manchester
 
 # Compiler, Linker Defines
 CC      = gcc
@@ -36,15 +34,8 @@ RM      = /bin/rm -f
 	$(CC) -c $(CFLAGS) $*.c -o $@
 
 # Link all Object Files with external Libraries into Binaries
-$(EXE): $(OBJ) $(PROGS) $(TRAP_EXE)
+$(EXE): $(OBJ) $(PROGS)
 	$(CC) $(OBJ) $(LDFLAGS)
-
-$(TRAP_EXE): $(OBJ) $(PROGS) $(BUILDDIR)/os
-	mkdir $(BUILDDIR)/trap || true
-	$(CC) $(SRC) -o $(TRAP_EXE) $(CFLAGS) $(LIBPATH) $(LIBS) -DENABLE_TRAP_MODE
-	cp $(PROGS) $(BUILDDIR)/trap
-	cat os_trap os.tass > os_trap.tass
-	python assembler.py --file os_trap.tass --output $(BUILDDIR)/trap/os
 
 # Objects depend on these Libraries
 $(OBJ): $(INCL)
@@ -58,21 +49,19 @@ debug: $(PROGS)
 
 # Clean Up Objects, Exectuables, Dumps out of source directory
 clean:
-	$(RM) $(OBJ) $(EXE) core a.out $(PROGS) $(TRAP_EXE)
+	$(RM) $(OBJ) $(EXE) core a.out $(PROGS)
 
-deploy: $(EXE) $(PROGS) $(TRAP_EXE)
+deploy: $(EXE) $(PROGS)
 	strip $(BUILDDIR)/manchester
 	cp $(BUILDDIR)/manchester ../manchester
 	cp $(BUILDDIR)/manchester ../../local-tester/manchester
 
-	python strip.py --file $(PROGS) $(TRAP_PROGS)
+	python strip.py --file $(PROGS)
 
 	cp $(PROGS) ../
-	cp $(PROGS) ../../local-tester/
-	cp -R build/programs ../../local-tester/
+	cp $(PROGS) ../../interaction/
+	cp -R build/programs ../../interaction/
 	rm -f ../parallel-af.tar.gz || true
-	cp build/os ../../remote-interaction/
-	cd ../ && tar -zcvf parallel-af.tar.gz manchester os && cp parallel-af.tar.gz ../patches/original.tar.gz.accepted && cd -
+	cp build/os ../../interaction/
+	echo TODO cd ../ && tar -zcvf parallel-af.tar.gz manchester os && cp parallel-af.tar.gz ../patches/original.tar.gz.accepted && cd -
 
-	strip $(TRAP_EXE)
-	cd build/trap && tar -zcvf ../../../../patches/original-trap-mode.tar.gz.accepted manchester os && cd -

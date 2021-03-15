@@ -8,17 +8,6 @@
 #include "queue.h"
 #include "khash.h"
 
-#define TRAP_CODE_LIMIT 100
-
-#ifdef ENABLE_TRAP_MODE
-bool trap_flag = true;
-#else
-bool trap_flag = false;
-#endif
-
-
-
-KHASH_MAP_INIT_INT64(trap_waiting, token_type)
 
 uint64_t hash(uint64_t var)
 {
@@ -42,63 +31,12 @@ void send_result(execution_result result, queue* outgoing_token_packets)
    }
 }
 
-void single_step_token(destination_type input, token_type token, queue* outgoing_token_packets, khash_t(trap_waiting) *hash_table)
-{
-   tag_area_type new_tag = new_tag_area();
-   token_type destination_0 = {
-      .destination = CREATE_DESTINATION(0, INPUT_ONE, MATCHING_ONE),
-      .data = hash(input),
-      .tag = new_tag,
-   };
-   queue_add(outgoing_token_packets, &destination_0, sizeof(token_type));
-
-   #ifdef DEBUG
-   print_token(destination_0);
-   #endif
-
-   token_type destination_1 = {
-      .destination = CREATE_DESTINATION(1, INPUT_ONE, MATCHING_ONE),
-      .data = hash(token.destination),
-      .tag = new_tag,
-   };
-   queue_add(outgoing_token_packets, &destination_1, sizeof(token_type));
-
-   #ifdef DEBUG
-   print_token(destination_1);
-   #endif
-
-   destination_type random_dest = (destination_type) random();
-
-   token_type destination_2 = {
-      .destination = CREATE_DESTINATION(2, INPUT_ONE, MATCHING_ONE),
-      .data = random_dest,
-      .tag = new_tag,
-   };
-   queue_add(outgoing_token_packets, &destination_2, sizeof(token_type));
-
-   #ifdef DEBUG
-   print_token(destination_2);
-   #endif
-
-   // TODO: store new_tag, random_dest as the keys in a hash table that also has the token.
-
-   int ret;
-   khint_t k = kh_put(trap_waiting, hash_table, random_dest, &ret);
-   kh_value(hash_table, k) = token;
-
-   /* #ifdef DEBUG */
-   /* fprintf(stderr, " result of %p\n", */
-   /*         next.input); */
-
-   /* #endif */
-
-}
-
 void run_processing_unit(queue* incoming_execution_packets, queue* outgoing_token_packets)
 {
-   khash_t(trap_waiting) *hash_table = kh_init(trap_waiting);
-   
+   #ifdef DEBUG
    pid_t pid = getpid();
+   #endif
+
    while(1)
    {
 	  execution_packet next;
@@ -107,67 +45,19 @@ void run_processing_unit(queue* incoming_execution_packets, queue* outgoing_toke
 
 	  result = function_unit(next);
 
-      if (trap_flag && next.opcode == RTD)
-      {
-         khint_t k = kh_get(trap_waiting, hash_table, result.output_1.destination);
-         if (k != kh_end(hash_table))
-         {
+      #ifdef DEBUG
+      fprintf(stderr, "%d: Execution result of %d %s %lu %lu 0x%lx\n",
+              pid,
+              DESTINATION_TO_ADDRESS(next.input),
+              opcode_to_name[next.opcode],
+              next.data_1,
+              next.data_2,
+              next.tag);
+      print_result(result);
+      #endif
 
-            #ifdef DEBUG
-            fprintf(stderr, "Result of trap %p, %d\n",
-                    DESTINATION_TO_ADDRESS(next.input),
-                    result.output_1.destination);
-            print_result(result);
-            #endif
+      send_result(result, outgoing_token_packets);
 
-            // This packet is the result of the single step
-            // Check the result, if it's good then we send the original token
-            if (result.output_1.data == 1)
-            {
-               token_type to_send = kh_value(hash_table, k);
-               #ifdef DEBUG
-               print_token(to_send);
-               #endif
-               queue_add(outgoing_token_packets, &to_send, sizeof(token_type));
-            }
-            kh_del(trap_waiting, hash_table, k);
-            continue;
-         }
-      }
-
-      if (trap_flag && ((uint16_t)DESTINATION_TO_ADDRESS(next.input) >= TRAP_CODE_LIMIT))
-      {
-
-         #ifdef DEBUG
-         fprintf(stderr, "Trapping result of %p\n",
-                 next.input);
-         print_result(result);
-         #endif
-
-
-         // TODO: add this to the hash table
-         single_step_token(next.input, result.output_1, outgoing_token_packets, hash_table);
-         
-         if (result.marker == BOTH_OUTPUT_MARKER)
-         {
-            single_step_token(next.input, result.output_2, outgoing_token_packets, hash_table);
-         }
-      }
-      else
-      {
-	     #ifdef DEBUG
-         fprintf(stderr, "%d: Execution result of %d %s %lu %lu 0x%lx\n",
-                 pid,
-                 DESTINATION_TO_ADDRESS(next.input),
-                 opcode_to_name[next.opcode],
-                 next.data_1,
-                 next.data_2,
-                 next.tag);
-         print_result(result);
-         #endif
-
-         send_result(result, outgoing_token_packets);
-      }
    }
 }
 
