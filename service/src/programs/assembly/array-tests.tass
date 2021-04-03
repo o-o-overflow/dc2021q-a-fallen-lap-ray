@@ -1,0 +1,14 @@
+ref, _ = ARF 0 0
+OUTD ref
+
+error = NAR 0
+OUTD error
+
+zero = XOR ref ref
+size = ADD zero 100
+array = NAR size
+
+# try to access the end of the array
+b, value = ARF array size
+OUTD b
+
