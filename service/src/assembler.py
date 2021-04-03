@@ -141,6 +141,9 @@ _OPCODE_LIST = [
     Opcode(32, 1, 'ULK'),
     Opcode(33, 2, 'LSK'),
     Opcode(34, 1, 'RND'),
+    Opcode(35, 1, 'NAR'),
+    Opcode(36, 2, 'ARF'),
+    Opcode(37, 2, 'AST'),
 ]
     
 
@@ -486,7 +489,7 @@ def parse_create_ir_graph(input: typing.TextIO) -> Graph:
 
         # Originally I wrote the next line only for BRR, then I realized that it also works for NTG (which I didn't consider).
         # Frankly the syntax is such that this can be generalized and cleaned up for any instruction, but I don't have time for that. 
-        elif args[3].upper() == 'BRR' or args[3].upper() == 'NTG':
+        elif args[3].upper() == 'BRR' or args[3].upper() == 'NTG' or args[3].upper() == 'ARF':
             true_output = args[0].strip(',')
             false_output = args[1].strip(',')
 
@@ -662,6 +665,8 @@ def graph_to_dot(graph: Graph, out: typing.TextIO):
                     direction = 'T' if destination_name == 'destination_1' else 'F'
                 elif node.opcode == OPCODES['NTG']:
                     direction = 'new tag' if destination_name == 'destination_1' else 'old tag'
+                elif node.opcode == OPCODES['ARF']:
+                    direction = 'ref' if destination_name == 'destination_1' else 'value'
                 else:
                     direction = 'L' if destination.input == INPUT_ONE else 'R'
                 dot.edge(f"{node.id}", f"{destination.node.id}", label=f"{direction}")

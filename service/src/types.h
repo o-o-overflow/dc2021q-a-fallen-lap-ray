@@ -39,6 +39,9 @@ typedef enum {ADD,
               ULK, /* unlink */
               LSK, /* lseek */
               RND, /* Random */
+              NAR, /* New Array */
+              ARF, /* Array Reference */
+              AST, /* Array Set */
 } opcode_type;
 
 // defined in "types.c". Must be kept in sync with opcode_type ^

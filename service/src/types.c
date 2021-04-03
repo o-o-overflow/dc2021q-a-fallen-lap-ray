@@ -37,6 +37,9 @@ uint8_t opcode_to_num_inputs[] = {
    /* ULK */ 1,
    /* LSK */ 2,
    /* RND */ 1,
+   /* NAR */ 1,
+   /* ARF */ 2,
+   /* AST */ 2,
 };
 
 /* Not actually used, please change code in instruction_store.c */
@@ -91,5 +94,8 @@ char* opcode_to_name[] = {
    "ULK",
    "LSK",
    "RND",
+   "NAR",
+   "ARF",
+   "AST",
 };
 #endif

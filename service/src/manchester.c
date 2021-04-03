@@ -14,6 +14,7 @@
 #include "manchester.h"
 #include "matching_unit.h"
 #include "processing_unit.h"
+#include "arrays.h"
 #include "queue.h"
 
 #define SIZE_MATCHING_STORE 2048
@@ -53,6 +54,7 @@ void start_machine(char* os_filename, int timeout)
    queue* ready_token_pair_queue;
    queue* preprocessed_executable_packet_queue;
    queue* processed_executable_packet_queue;
+   queue* post_array_packet_queue;
 
    #ifdef DEBUG
    char* execution_token_output_queue_name = "/manchester-token-output";
@@ -83,12 +85,19 @@ void start_machine(char* os_filename, int timeout)
    #else
    char* processed_executable_packet_queue_name = "/5";
    #endif
+
+   #ifdef DEBUG
+   char* post_array_packet_queue_name = "/manchester-array-queue";
+   #else
+   char* post_array_packet_queue_name = "/6";
+   #endif
    
    execution_token_output_queue = queue_new(execution_token_output_queue_name, MAX_QUEUE_SIZE, sizeof(token_type));
    matching_unit_input_queue = queue_new(matching_unit_input_queue_name, MAX_QUEUE_SIZE, sizeof(token_type));
    ready_token_pair_queue = queue_new(ready_token_pair_queue_name, MAX_QUEUE_SIZE, sizeof(ready_token_pair_type));
    preprocessed_executable_packet_queue = queue_new(preprocessed_executable_packet_queue_name, MAX_QUEUE_SIZE, sizeof(execution_packet));
    processed_executable_packet_queue = queue_new(processed_executable_packet_queue_name, MAX_QUEUE_SIZE, sizeof(execution_packet));
+   post_array_packet_queue = queue_new(post_array_packet_queue_name, MAX_QUEUE_SIZE, sizeof(execution_packet));
 
    pid_t instruction_store = fork();
    if (instruction_store == 0)
@@ -102,10 +111,16 @@ void start_machine(char* os_filename, int timeout)
 	  run_input_module(preprocessed_executable_packet_queue, processed_executable_packet_queue);
    }
 
+   pid_t array_module = fork();
+   if (array_module == 0)
+   {
+      run_array_module(processed_executable_packet_queue, post_array_packet_queue);
+   }
+
    pid_t processing_unit = fork();
    if (processing_unit == 0)
    {
-	  run_processing_unit(processed_executable_packet_queue, execution_token_output_queue);
+	  run_processing_unit(post_array_packet_queue, execution_token_output_queue);
    }
 
    pid_t io_switch = fork();
@@ -136,6 +151,7 @@ void start_machine(char* os_filename, int timeout)
    kill(io_switch, 9);
    kill(input_module, 9);
    kill(timeout_process, 9);
+   kill(array_module, 9);
 }
 
 int main(int argc, char** argv)

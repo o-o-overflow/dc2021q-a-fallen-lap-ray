@@ -1,0 +1,19 @@
+a = NAR 100
+b, _ = ARF a 0
+c = AST b 10000
+d = XOR c c
+_, e = ARF a d
+OUTD e
+
+zero = XOR e e
+twenty = ADD zero 20
+f, _ = ARF a twenty
+g = AST f 100
+h = XOR g g
+i = ADD h 20
+_, j = ARF a i
+OUTD j
+
+k = XOR j j
+l, m = ARF a k
+OUTD m
