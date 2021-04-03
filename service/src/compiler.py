@@ -70,6 +70,7 @@ SPECIAL_FUNCTIONS = [Function("OUTD", "", ["output"], True, False),
                      Function("UNLINK", "", ["path"], True, True),
                      Function("LSEEK", "", ["fd", "offset"], True, True),
                      Function("RANDOM", "", ["input"], True, True),
+                     Function("NEW_ARRAY", "", ["size"], True, True),
 ]
 
 GENERATE_ASSEMBLY_SPECIAL_FUNCTIONS = {'OUTD': lambda args: f"OUTD {args[0]}\n",
@@ -84,7 +85,8 @@ GENERATE_ASSEMBLY_SPECIAL_FUNCTIONS = {'OUTD': lambda args: f"OUTD {args[0]}\n",
                                        'SENDFILE': lambda args: f"{args[-1]} = SDF {args[0]} {args[1]}\n",
                                        'UNLINK': lambda args: f"{args[-1]} = ULK {args[0]}\n",
                                        'LSEEK': lambda args: f"{args[-1]} = LSK {args[0]} {args[1]}\n",
-                                       'RANDOM': lambda args: f"{args[-1]} = RND {args[0]}\n"
+                                       'RANDOM': lambda args: f"{args[-1]} = RND {args[0]}\n",
+                                       'NEW_ARRAY': lambda args: f"{args[-1]} = NAR {args[0]}\n"
 }
 
 class ExtractFunctionsPass(lark.visitors.Interpreter):
@@ -111,8 +113,8 @@ class ExtractFunctionsPass(lark.visitors.Interpreter):
 
 class UsedVariablesPass(lark.Transformer):
 
-    def __init__(self, count_lhs = False):
-        self.count_lhs = count_lhs
+    def __init__(self):
+        self.count_lhs = True
 
     def _flatten(self, tree):
         to_return = list(itertools.chain.from_iterable(tree))
@@ -130,11 +132,13 @@ class UsedVariablesPass(lark.Transformer):
     function_def = _flatten
     conditional = _flatten
     while_loop = _flatten
+    sync = _flatten
     elif_clauses = _flatten
     function_call = _flatten
     else_clause = _flatten
     expression_function_arg_list = _flatten
     return_statement = _flatten
+    array_access = _flatten
 
     arg_list = lambda self, _: list()
     function_name = lambda self, _: list()
@@ -184,7 +188,7 @@ class GenerateAssemblyPass(lark.visitors.Interpreter):
 
         used_variables = set()
         for statements in tree.find_data('statements'):
-            used_vars_in_this = UsedVariablesPass(True).transform(statements)
+            used_vars_in_this = UsedVariablesPass().transform(statements)
             used_variables.update(used_vars_in_this)
 
         # Filter out all the undefined vars
@@ -259,8 +263,8 @@ class GenerateAssemblyPass(lark.visitors.Interpreter):
 
         undefined_before_loop = set()
         
-        used_variables = set(UsedVariablesPass(True).transform(tree.children[0]))
-        used_variables.update(UsedVariablesPass(True).transform(tree.children[1]))
+        used_variables = set(UsedVariablesPass().transform(tree.children[0]))
+        used_variables.update(UsedVariablesPass().transform(tree.children[1]))
         for var in used_variables:
             if not var in prior_variables:
                 prior_variables[var] = f"_{var}_not_defined_before_loop{self._new_temp_variable()}"
@@ -426,6 +430,25 @@ class GenerateAssemblyPass(lark.visitors.Interpreter):
 
         return self.variables[var_name]
 
+    @staticmethod
+    def array_access_value_to_ref(value):
+        """
+        Method to translate an array access value to a ref. Dirty, based on the `array_access` function using hardcoded prefixes.
+        """
+        value_prefix = "_value"
+        original = value[:-len(value_prefix)]
+        return f"{original}_ref"
+
+    def array_access(self, tree):
+        array = self.visit(tree.children[0])
+        expression_result = self.visit(tree.children[1])
+        new_variable_name = f"{array}_access_{self._new_temp_variable()}"
+        new_variable_name_ref = f"{new_variable_name}_ref"
+        new_variable_name_value = f"{new_variable_name}_value"
+
+        self.to_return += f"{new_variable_name_ref}, {new_variable_name_value} = ARF {array} {expression_result}\n"
+        return new_variable_name_value
+
     def outs_literal(self, tree):
         string = eval(str(tree.children[0]))
         for i in range(0, len(string), 8):
@@ -510,12 +533,21 @@ class GenerateAssemblyPass(lark.visitors.Interpreter):
 
     def assignment(self, tree):
         expression_result = self.visit(tree.children[1])
-        variable_name = str(tree.children[0].children[0].children[0])
-        new_variable_name = f"{variable_name}{self._new_temp_variable()}"
+        if tree.children[0].children[0].data == "var_name":
+            variable_name = str(tree.children[0].children[0].children[0])
+            new_variable_name = f"{variable_name}{self._new_temp_variable()}"
 
-        self.to_return += f"{new_variable_name} = DUP {expression_result}\n"
-        self.variables[variable_name] = new_variable_name
-        return None
+            self.to_return += f"{new_variable_name} = DUP {expression_result}\n"
+            self.variables[variable_name] = new_variable_name
+            return None
+        elif tree.children[0].children[0].data == "array_access":
+            array_value = self.visit(tree.children[0].children[0])
+            array_ref = GenerateAssemblyPass.array_access_value_to_ref(array_value)
+            self.to_return += f"_ = AST {array_ref} {expression_result}\n"
+            return None
+        else:
+            l.error(f"Don't know how to handle this assignment statement {tree}")
+            sys.exit(-1)
 
     def binary_operation(self, tree):
         op = tree.children[1].data

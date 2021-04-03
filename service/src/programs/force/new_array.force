@@ -1,0 +1,2 @@
+array = NEW_ARRAY(24);
+OUTD(array);

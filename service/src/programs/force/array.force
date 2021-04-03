@@ -1,0 +1,13 @@
+// testing arrays
+
+// Sync not implemented yet
+//sync {
+   array = NEW_ARRAY(16);
+   array[0] = 10;
+   OUTD(array[0]);
+   array[8] = 100;
+   OUTD(array[8]);
+   OUTD(array[0]);
+//}
+
+

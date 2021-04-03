@@ -26,8 +26,11 @@ conditional: "if" "(" expression ")" "{" statements "}" [else_clause]
 
 else_clause: "else" "{" statements "}"
 
+sync: "sync" "{" statements "}"
+
 ?expression: function_call
 		  | binary_operation
+          | array_access
 		  | var_name
 		  | STRING -> string
 		  | NUMBER -> number
@@ -35,6 +38,7 @@ else_clause: "else" "{" statements "}"
 		  | "(" expression ")"
 
 lhs: var_name
+  | array_access
 
 hexnumber: /[0-9a-zA-Z]+/
 
@@ -44,6 +48,7 @@ function_call: "OUTS_LITERAL" "(" STRING ")" -> outs_literal
 			 | function_name "(" [expression_function_arg_list] ")"
 
 binary_operation: expression op expression
+array_access: var_name "[" expression "]"
 return_statement: "return" [expression]
 export_statement: "export" function_name
 extern_statement: "extern" function_name "(" [arg_list] ")"

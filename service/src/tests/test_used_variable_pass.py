@@ -54,7 +54,15 @@ defun strlen(s)
 }
 """,
      ["s", "i", "done", "shifted", "char"],
-     ["s", "i", "done", "shifted", "char"])
+     ["s", "i", "done", "shifted", "char"]),
+    ("""
+x = 0;
+y = array[x];
+foobar[z] = 10;
+""",
+     ["x", "array", "z"],
+     ["x", "array", "y", "foobar", "z"])
+
 ]
 
 def test_used_variable_pass():
@@ -64,10 +72,11 @@ def test_used_variable_pass():
     for program, success_no_lhs, success_use_lhs in TEST_CASES_AND_EXPECTED_OUTPUT:
         tree = parser.parse(program)
 
-        output_no_lhs = set(compiler.UsedVariablesPass(False).transform(tree))
-        assert(output_no_lhs == set(success_no_lhs))
+        # removed this b/c we don't actually use this mode!
+        # output_no_lhs = set(compiler.UsedVariablesPass(False).transform(tree))
+        # assert(output_no_lhs == set(success_no_lhs))
 
-        output_with_lhs = set(compiler.UsedVariablesPass(True).transform(tree))
+        output_with_lhs = set(compiler.UsedVariablesPass().transform(tree))
         assert(output_with_lhs == set(success_use_lhs))
 
     

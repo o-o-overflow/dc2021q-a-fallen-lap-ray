@@ -24,6 +24,12 @@ do
     OUTPUT="$OUTPUT_DIR/$NAME.bin"
 	echo "Assembling $NAME"
 	python3 assembler.py --file "$ASSEMBLY" --output "$OUTPUT"
+	if [ $? -ne 0 ]
+	then
+		echo -e "${RED}FAILED TEST CASE $NAME${NC}"
+		FAILURES=$((FAILURES+1))
+        continue
+	fi
 	echo "Testing $NAME (test case $CASES)"
     cp "$f" "$OUTPUT_DIR"
 	if [ -f "$INPUT" ]
@@ -51,6 +57,12 @@ do
 
 	echo "Compiling $NAME"
 	python3 compiler.py --file "$PROGRAM" --output "$OUTPUT"
+	if [ $? -ne 0 ]
+	then
+		echo -e "${RED}FAILED TEST CASE $NAME${NC}"
+		FAILURES=$((FAILURES+1))
+        continue
+	fi
 	echo "Testing $NAME (test case $CASES)"
 
     cp "$f" "$OUTPUT_DIR"
