@@ -42,6 +42,7 @@ typedef enum {ADD,
               NAR, /* New Array */
               ARF, /* Array Reference */
               AST, /* Array Set */
+              MOD, /* MOD operator % */
 } opcode_type;
 
 // defined in "types.c". Must be kept in sync with opcode_type ^

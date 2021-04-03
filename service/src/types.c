@@ -40,6 +40,7 @@ uint8_t opcode_to_num_inputs[] = {
    /* NAR */ 1,
    /* ARF */ 2,
    /* AST */ 2,
+   /* MOD */ 2,
 };
 
 /* Not actually used, please change code in instruction_store.c */
@@ -97,5 +98,6 @@ char* opcode_to_name[] = {
    "NAR",
    "ARF",
    "AST",
+   "MOD",
 };
 #endif

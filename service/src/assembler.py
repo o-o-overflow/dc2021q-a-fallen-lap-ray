@@ -144,6 +144,7 @@ _OPCODE_LIST = [
     Opcode(35, 1, 'NAR'),
     Opcode(36, 2, 'ARF'),
     Opcode(37, 2, 'AST'),
+    Opcode(38, 2, 'MOD'),
 ]
     
 

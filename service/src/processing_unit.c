@@ -255,6 +255,12 @@ execution_result function_unit(execution_packet packet)
 		 computation_result = packet.data_1 * packet.data_2;
 		 break;
 
+	  // output = data_1 % data_2
+	  case MOD:
+		 computation_result = packet.data_1 % packet.data_2;
+		 break;
+
+
 	  // output = data_1 ^ data_2
 	  case XOR:
 		 computation_result = packet.data_1 ^ packet.data_2;

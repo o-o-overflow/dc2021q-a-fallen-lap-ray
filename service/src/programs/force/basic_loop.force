@@ -5,3 +5,10 @@ while (x < 10) {
   OUTD(x);
 }
 OUTD(x + 1);
+
+// Test mod operator
+x = x ^ x;
+while (x < 5) {
+   OUTD(x % 2);
+   x = x + 1;
+}

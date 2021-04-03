@@ -23,6 +23,7 @@ OP_TO_ASM = {
     'sub': 'SUB',
     'mul': 'MUL',
     'div': 'NOT_IMPLEMENTED',
+    'mod': 'MOD',
     'bit_and': 'AND',
     'bit_xor': 'XOR',
     'bit_or': 'OR',

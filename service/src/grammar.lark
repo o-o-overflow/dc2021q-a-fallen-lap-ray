@@ -60,6 +60,7 @@ op: "+" -> add
   | "-" -> sub
   | "*" -> mul
   | "/" -> div
+  | "%" -> mod
   | "&" -> bit_and
   | "^" -> bit_xor
   | "|" -> bit_or
