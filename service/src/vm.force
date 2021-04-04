@@ -1,0 +1,52 @@
+// VM constants
+
+define_constant(WORD_SIZE, 8);
+define_constant(MEM_LENGTH, 256 * WORD_SIZE);
+define_constant(CODE_LENGTH, 256 * WORD_SIZE);
+
+define_constant(REGISTER_LENGTH, 7 * WORD_SIZE);
+define_constant(REG_A, 0 * WORD_SIZE);
+define_constant(REG_B, 1 * WORD_SIZE);
+define_constant(REG_C, 2 * WORD_SIZE);
+define_constant(REG_D, 3 * WORD_SIZE);
+define_constant(REG_S, 4 * WORD_SIZE);
+define_constant(REG_I, 5 * WORD_SIZE);
+define_constant(REG_F, 6 * WORD_SIZE);
+
+defun interpret_instruction(memory, code, registers, instruction)
+{
+   OUTD(registers[REG_I]);
+   return 0;
+}
+
+defun interpreter_loop(memory, code, registers)
+{
+   i = 0;
+   while(registers[REG_I] != CODE_LENGTH)
+   {
+      OUTS_LITERAL("Instruction\n");
+      ip = registers[REG_I];
+      registers[REG_I] = ip + 1;
+      instruction = code[ip % CODE_LENGTH];
+      interpret_instruction(memory, code, registers, instruction);
+      i = i + 1;
+   }
+   return i ^ i;
+}
+
+defun main(arg)
+{
+   memory = NEW_ARRAY(MEM_LENGTH);
+   code = NEW_ARRAY(CODE_LENGTH);
+   registers = NEW_ARRAY(REGISTER_LENGTH);
+   registers[REG_I] = 0;
+
+   // load code somehow
+   OUTS_LITERAL("In the VM\n");
+
+   result = interpreter_loop(memory, code, registers);
+   return result;
+}
+export main;
+
+   
