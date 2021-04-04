@@ -1,0 +1,12 @@
+define_constant(IDX, 40);
+
+defun fun(array)
+{
+   OUTD(array[IDX]);
+   return 0;
+}
+
+array = NEW_ARRAY(4096);
+
+array[IDX] = 1000;
+fun(array);

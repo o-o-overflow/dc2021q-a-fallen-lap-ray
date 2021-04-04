@@ -39,6 +39,7 @@ defun strlen(s)
   done = 0;
   while (done != 1)
   {
+    test = array[y];
     shifted = s >> i;
 	char = shifted & 0xff;
 	if (char == 0)
@@ -53,8 +54,8 @@ defun strlen(s)
   return i;
 }
 """,
-     ["s", "i", "done", "shifted", "char"],
-     ["s", "i", "done", "shifted", "char"]),
+     ["s", "i", "done", "shifted", "char", "test", "array", "y"],
+     ["s", "i", "done", "shifted", "char", "test", "array", "y"]),
     ("""
 x = 0;
 y = array[x];

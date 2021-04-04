@@ -16,4 +16,4 @@
   (font-lock-fontify-buffer))
 
 (font-lock-add-keywords 'force-mode
-                        '(("\\<\\(defun\\|OUTS_LITERAL\\|export\\|extern\\|asm\\|sync\\|new\\|OUTD\\|OUTS\\|OPEN\\|READ\\|WRITE\\|CLOSE\\|HALT\\|LOAD\\|LISTDIR\\|SENDFILE\\|UNLINK\\|LSEEK\\|RANDOM\\|NEW_ARRAY\\)\\>" . font-lock-keyword-face)))
+                        '(("\\<\\(defun\\|OUTS_LITERAL\\|export\\|extern\\|asm\\|sync\\|new\\|OUTD\\|OUTS\\|OPEN\\|READ\\|WRITE\\|CLOSE\\|HALT\\|LOAD\\|LISTDIR\\|SENDFILE\\|UNLINK\\|LSEEK\\|RANDOM\\|NEW_ARRAY\\|define_constant\\)\\>" . font-lock-keyword-face)))

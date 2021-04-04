@@ -171,6 +171,7 @@ class GenerateAssemblyPass(lark.visitors.Interpreter):
     functions: typing.Dict[str, Function]
     to_return: str = ""
     variables = dict()
+    constant_variables = dict()
     return_variables = set()
     current_scope_tag = None
     first_call_to_current_scope_tag = None
@@ -425,11 +426,13 @@ class GenerateAssemblyPass(lark.visitors.Interpreter):
     def var_name(self, tree):
         var_name = str(tree.children[0])
 
-        if not var_name in self.variables:
+        if var_name in self.constant_variables:
+            return self.visit(self.constant_variables[var_name])
+        elif var_name in self.variables:
+            return self.variables[var_name]
+        else:
             l.error(f"variable {var_name} not defined.")
             sys.exit(-1)
-
-        return self.variables[var_name]
 
     @staticmethod
     def array_access_value_to_ref(value):
@@ -465,6 +468,29 @@ class GenerateAssemblyPass(lark.visitors.Interpreter):
 
     def function_call(self, tree):
         function_name = str(tree.children[0].children[0])
+
+        if function_name == "define_constant":
+            if len(tree.children[1].children) != 2:
+                l.error("Call to {function_name} has the wrong number of arguments {len(tree.children[1].children)} expected 2")
+                sys.exit(-1)
+            if tree.children[1].children[0].data != 'var_name':
+                l.error("define_constant first argument must be var_name, instead had {tree.children[1].children[0]}")
+                sys.exit(-1)
+
+            var_name = str(tree.children[1].children[0].children[0])
+            const_expression = tree.children[1].children[1]
+
+            if var_name in self.variables:
+                l.error("define_constant trying to define {var_name} but it is already defined as a variable.")
+                sys.exit(-1)
+
+            if var_name in self.constant_variables:
+                l.error("define_constant trying to define {var_name} but it is already defined as a constant variable.")
+                sys.exit(-1)
+
+            self.constant_variables[var_name] = const_expression
+            return None
+
         function_args = [self.visit(c) for c in tree.children[1].children] if len(tree.children) == 2 else []
 
         if function_name in self.functions:
@@ -536,6 +562,11 @@ class GenerateAssemblyPass(lark.visitors.Interpreter):
         expression_result = self.visit(tree.children[1])
         if tree.children[0].children[0].data == "var_name":
             variable_name = str(tree.children[0].children[0].children[0])
+
+            if variable_name in self.constant_variables:
+                l.error("Cannot assign to constant variable {variable_name}")
+                sys.exit(-1)
+
             new_variable_name = f"{variable_name}{self._new_temp_variable()}"
 
             self.to_return += f"{new_variable_name} = DUP {expression_result}\n"
@@ -654,7 +685,8 @@ def main(input_file, output_file, assembly_output, graph_output, backdoor):
         parser = lark.Lark(grammar, start='program')
     
     with open(input_file, 'r') as input:
-        tree = parser.parse(input.read())
+        original_file_input = input.read()
+        tree = parser.parse(original_file_input)
 
     l.debug(f"parsed tree: {tree.pretty()}")
 

@@ -3,7 +3,7 @@
 
 #include "arrays.h"
 
-#define MAX_ARRAY_SIZE 1024
+#define MAX_ARRAY_SIZE 4096
 #define MAX_ARRAYS 100
 
 void** arrays;
