@@ -1,8 +1,20 @@
 // VM constants
 
+extern write_bytes(fd, bytes, num);
+extern open_file(filename, flags);
+
+define_constant(O_WRONLY, 0x0001);
+define_constant(O_CREAT, 0x010);
+define_constant(O_TRUNC, 0x020);
+define_constant(O_RDONLY, 0x0000);
+define_constant(O_RDWR, 0x0002);
+
+
 define_constant(WORD_SIZE, 8);
 define_constant(MEM_LENGTH, 256 * WORD_SIZE);
 define_constant(CODE_LENGTH, 256 * WORD_SIZE);
+
+define_constant(STACK_DIRECTION, 1 * WORD_SIZE);
 
 define_constant(REGISTER_LENGTH, 7 * WORD_SIZE);
 define_constant(REG_A, 0 * WORD_SIZE);
@@ -13,10 +25,398 @@ define_constant(REG_S, 4 * WORD_SIZE);
 define_constant(REG_I, 5 * WORD_SIZE);
 define_constant(REG_F, 6 * WORD_SIZE);
 
+define_constant(INST_OP_MASK, 0xFF);
+define_constant(INST_ARG1_MASK, 0xFF00);
+define_constant(INST_ARG1_SHIFT, 16);
+define_constant(INST_ARG2_MASK, 0xFF0000);
+define_constant(INST_ARG2_SHIFT, 32);
+
+define_constant(INST_IMM, 1);
+define_constant(INST_STK, 2);
+define_constant(INST_ADD, 4);
+define_constant(INST_STM, 8);
+define_constant(INST_LDM, 16);
+define_constant(INST_JMP, 32);
+define_constant(INST_CMP, 64);
+define_constant(INST_SYS, 128);
+
+define_constant(SPEC_REG_A, 1);
+define_constant(SPEC_REG_B, 2);
+define_constant(SPEC_REG_C, 4);
+define_constant(SPEC_REG_D, 8);
+define_constant(SPEC_REG_S, 16);
+define_constant(SPEC_REG_I, 32);
+define_constant(SPEC_REG_F, 64);
+
+define_constant(SYS_OPEN, 1);
+define_constant(SYS_READ_MEMORY, 2);
+define_constant(SYS_READ_CODE, 4);
+define_constant(SYS_WRITE, 8);
+define_constant(SYS_SLEEP, 16);
+define_constant(SYS_EXIT, 32);
+
+define_constant(FLAG_L, 1);
+define_constant(FLAG_G, 2);
+define_constant(FLAG_E, 4);
+define_constant(FLAG_N, 8);
+define_constant(FLAG_Z, 16);
+
+defun min(a, b)
+{
+   to_return = a;
+   if (b < a)
+   {
+      to_return = b;
+   }
+   return to_return;
+}
+
+defun write_register(registers, reg_spec, new_value)
+{
+   if (reg_spec == SPEC_REG_A)
+   {
+      registers[REG_A] = new_value;
+   }
+   else {
+      if (reg_spec == SPEC_REG_B)
+      {
+         registers[REG_B] = new_value;
+      }
+      else {
+         if (reg_spec == SPEC_REG_C)
+         {
+            registers[REG_C] = new_value;
+         }
+         else {
+            if (reg_spec == SPEC_REG_D)
+            {
+               registers[REG_D] = new_value;
+            }
+            else { 
+               if (reg_spec == SPEC_REG_S)
+               {
+                  registers[REG_S] = new_value;
+               }
+               else {
+                  if (reg_spec == SPEC_REG_I)
+                  {
+                     registers[REG_I] = new_value;
+                  }
+                  else {
+                     if (reg_spec == SPEC_REG_F)
+                     {
+                        registers[REG_F] = new_value;
+                     }
+                  }
+               }
+            }
+         }
+      }
+   }
+   // TODO: should we crash here?
+   return new_value ^ new_value;
+}
+
+defun read_register(registers, reg_spec)
+{
+   to_return = -1;
+   if (reg_spec == SPEC_REG_A)
+   {
+      to_return = registers[REG_A];
+   }
+   else {
+      if (reg_spec == SPEC_REG_B)
+      {
+         to_return = registers[REG_B];
+      }
+      else {
+         if (reg_spec == SPEC_REG_C)
+         {
+            to_return = registers[REG_C];
+         }
+         else {
+            if (reg_spec == SPEC_REG_D)
+            {
+               to_return = registers[REG_D];
+            }
+            else {
+               if (reg_spec == SPEC_REG_S)
+               {
+                  to_return = registers[REG_S];
+               }
+               else {
+                  if (reg_spec == SPEC_REG_I)
+                  {
+                     to_return = registers[REG_I];
+                  }
+                  else {
+                     if (reg_spec == SPEC_REG_F)
+                     {
+                        to_return = registers[REG_F];
+                     }
+                  }
+               }
+            }
+         }
+      }
+   }
+   // TODO: should we crash here?
+   return to_return;
+}
+
+defun read_memory(memory, address)
+{
+   return memory[address];
+}
+
+defun write_memory(memory, address, value)
+{
+   memory[address] = value;
+   return 0;
+}
+
+defun interpret_imm(memory, code, registers, instruction)
+{
+   OUTS_LITERAL("imm\n");
+   arg1 = (instruction & INST_ARG1_MASK) >> INST_ARG1_SHIFT;
+   arg2 = (instruction & INST_ARG2_MASK) >> INST_ARG2_SHIFT;
+
+   result = write_register(registers, arg1, arg2);
+   return result ^ result;
+}
+
+defun interpret_add(memory, code, registers, instruction)
+{
+   OUTS_LITERAL("add\n");
+   arg1 = (instruction & INST_ARG1_MASK) >> INST_ARG1_SHIFT;
+   arg2 = (instruction & INST_ARG2_MASK) >> INST_ARG2_SHIFT;
+
+   arg1_value = read_register(registers, arg1);
+   arg2_value = read_register(registers, arg2);
+
+   new_value = arg1_value + arg2_value;
+
+   result = write_register(registers, arg1, new_value);
+
+   return result ^ result;
+}
+
+defun interpret_stk(memory, code, registers, instruction)
+{
+   OUTS_LITERAL("stk\n");
+   arg1 = (instruction & INST_ARG1_MASK) >> INST_ARG1_SHIFT;
+   arg2 = (instruction & INST_ARG2_MASK) >> INST_ARG2_SHIFT;
+
+   pop = 0;
+   if (arg1)
+   {
+      // This is a pop
+      stack_addr = registers[REG_S];
+      stack_value = read_memory(memory, stack_addr);
+      result = write_register(registers, arg1, stack_value);
+      registers[REG_S] = stack_addr - STACK_DIRECTION;
+      pop = result ^ result;
+   }
+
+   push = 0;
+   if (arg2)
+   {
+      // this is a push
+      arg2_value = read_register(registers, arg2);
+      stack_addr = registers[REG_S] + STACK_DIRECTION;
+
+      result = write_memory(memory, stack_addr, arg2_value);
+      registers[REG_S] = stack_addr;
+      push = result ^ result;
+   }
+
+   return (pop ^ pop) + (push ^ push);
+}
+
+defun interpret_stm(memory, code, registers, instruction)
+{
+   OUTS_LITERAL("stm\n");
+
+   arg1 = (instruction & INST_ARG1_MASK) >> INST_ARG1_SHIFT;
+   arg2 = (instruction & INST_ARG2_MASK) >> INST_ARG2_SHIFT;
+
+   arg1_value = read_register(registers, arg1);
+   arg2_value = read_register(registers, arg2);
+
+   result = write_memory(memory, arg1_value, arg2_value);
+   return result^result;
+}
+
+defun interpret_ldm(memory, code, registers, instruction)
+{
+   OUTS_LITERAL("ldm\n");
+
+   arg1 = (instruction & INST_ARG1_MASK) >> INST_ARG1_SHIFT;
+   arg2 = (instruction & INST_ARG2_MASK) >> INST_ARG2_SHIFT;
+
+   arg2_value = read_register(registers, arg2);
+
+   memory_value = read_memory(memory, arg2_value);
+
+   result = write_register(registers, arg1, memory_value);
+   return result ^ result;
+}
+
+defun interpret_cmp(memory, code, registers, instruction)
+{
+   OUTS_LITERAL("cmp\n");
+
+   arg1 = (instruction & INST_ARG1_MASK) >> INST_ARG1_SHIFT;
+   arg2 = (instruction & INST_ARG2_MASK) >> INST_ARG2_SHIFT;
+
+   arg1_value = read_register(registers, arg1);
+   arg2_value = read_register(registers, arg2);
+
+   flag = 0;
+   if (arg1_value < arg2_value)
+   {
+      flag = flag | FLAG_L;
+   }
+
+   if (arg1_value > arg2_value)
+   {
+      flag = flag | FLAG_G;
+   }
+
+   if (arg1_value == arg2_value)
+   {
+      flag = flag | FLAG_E;
+   }
+
+   if (arg1_value != arg2_value)
+   {
+      flag = flag | FLAG_N;
+   }
+
+   if ((arg1_value == 0) & (arg2_value == 0))
+   {
+      flag = flag | FLAG_Z;
+   }
+
+   result = write_register(registers, REG_F, flag);
+
+   return result ^ result;
+}
+
+defun interpret_jmp(memory, code, registers, instruction)
+{
+   OUTS_LITERAL("jmp\n");
+   flags = (instruction & INST_ARG1_MASK) >> INST_ARG1_SHIFT;
+   arg2 = (instruction & INST_ARG2_MASK) >> INST_ARG2_SHIFT;
+
+   // flags == 0 is an unconditional jump
+   // otherwise flags (arg1) must be the same as the F register
+   jump = 0;
+   if ((flags == 0) | (flags & registers[REG_F]))
+   {
+      OUTS_LITERAL("taken\n");
+      dest = read_register(registers, arg2);
+      registers[REG_I] = dest;
+      if (1)
+      {
+         jump = dest ^ dest;
+      }
+   }
+   else
+   {
+      OUTS_LITERAL("!taken\n");
+      jump = -1;
+   }
+
+   return jump ^ jump;
+}
+
+defun interpret_sys(memory, code, registers, instruction)
+{
+   OUTS_LITERAL("TODO sys\n");
+
+   arg1 = (instruction & INST_ARG1_MASK) >> INST_ARG1_SHIFT;
+   arg2 = (instruction & INST_ARG2_MASK) >> INST_ARG2_SHIFT;
+
+   open_output = 0;
+   if (arg1 & SYS_OPEN)
+   {
+      // arg2 = open_file(&reg_a, reg_b)
+      fname = memory[registers[REG_A]];
+      flags = registers[REG_B];
+
+      open_output = open_file(fname, flags);
+      open_output = write_register(registers, arg2, open_output);
+   }
+
+   write_output = 0;
+   if (arg1 & SYS_WRITE)
+   {
+      // arg2 = write_bytes(reg_a, &reg_b, min(reg_c, WORD_SIZE));
+      data = memory[registers[REG_B]];
+      len = min(registers[REG_C], WORD_SIZE);
+      fd = memory[registers[REG_A]];
+
+      write_output = write_bytes(fd, data, len);
+      write_output = write_register(registers, arg2, write_output);
+   }
+
+   return write_output ^ open_output;
+}
+
+
 defun interpret_instruction(memory, code, registers, instruction)
 {
-   OUTD(registers[REG_I]);
-   return 0;
+   op = instruction & INST_OP_MASK;
+   imm_output = 0;
+   if (op & INST_IMM)
+   {
+      imm_output = interpret_imm(memory, code, registers, instruction);
+   }
+
+   add_output = 0;
+   if (op & INST_ADD)
+   {
+      add_output = interpret_add(memory, code, registers, instruction);
+   }
+
+   stk_output = 0;
+   if (op & INST_STK)
+   {
+      stk_output = interpret_stk(memory, code, registers, instruction);
+   }
+
+   stm_output = 0;
+   if (op & INST_STM)
+   {
+      stm_output = interpret_stm(memory, code, registers, instruction);
+   }
+
+   ldm_output = 0;
+   if (op & INST_LDM)
+   {
+      ldm_output = interpret_ldm(memory, code, registers, instruction);
+   }
+
+   cmp_output = 0;
+   if (op & INST_CMP)
+   {
+      cmp_output = interpret_cmp(memory, code, registers, instruction);
+   }
+
+   jmp_output = 0;
+   if (op & INST_JMP)
+   {
+      jmp_output = interpret_jmp(memory, code, registers, instruction);
+   }
+
+   sys_output = 0;
+   if (op & INST_SYS)
+   {
+      sys_output = interpret_sys(memory, code, registers, instruction);
+   }
+
+   return add_output ^ stk_output ^ stm_output ^ ldm_output ^ cmp_output ^ jmp_output ^ sys_output;
 }
 
 defun interpreter_loop(memory, code, registers)
@@ -24,12 +424,12 @@ defun interpreter_loop(memory, code, registers)
    i = 0;
    while(registers[REG_I] != CODE_LENGTH)
    {
-      OUTS_LITERAL("Instruction\n");
+      OUTS_LITERAL("Inst\n");
       ip = registers[REG_I];
-      registers[REG_I] = ip + 1;
+      registers[REG_I] = ip + WORD_SIZE;
       instruction = code[ip % CODE_LENGTH];
-      interpret_instruction(memory, code, registers, instruction);
-      i = i + 1;
+      result = interpret_instruction(memory, code, registers, instruction);
+      i = i + 1 + (result ^ result);
    }
    return i ^ i;
 }
@@ -40,6 +440,8 @@ defun main(arg)
    code = NEW_ARRAY(CODE_LENGTH);
    registers = NEW_ARRAY(REGISTER_LENGTH);
    registers[REG_I] = 0;
+
+   code[0] = 0xFFFFDF;
 
    // load code somehow
    OUTS_LITERAL("In the VM\n");
