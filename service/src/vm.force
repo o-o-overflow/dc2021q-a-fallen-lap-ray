@@ -1,7 +1,13 @@
 // VM constants
 
+# from OS
 extern write_bytes(fd, bytes, num);
+extern read_bytes(fd, num);
 extern open_file(filename, flags);
+
+# from shell
+extern arg_to_arg(arg);
+extern arg_to_stdout_fd(arg);
 
 define_constant(O_WRONLY, 0x0001);
 define_constant(O_CREAT, 0x010);
@@ -11,8 +17,8 @@ define_constant(O_RDWR, 0x0002);
 
 
 define_constant(WORD_SIZE, 8);
-define_constant(MEM_LENGTH, 256 * WORD_SIZE);
-define_constant(CODE_LENGTH, 256 * WORD_SIZE);
+define_constant(INSTRUCTION_SIZE, 3);
+define_constant(MEM_LENGTH, 512);
 
 define_constant(STACK_DIRECTION, 1 * WORD_SIZE);
 
@@ -27,9 +33,9 @@ define_constant(REG_F, 6 * WORD_SIZE);
 
 define_constant(INST_OP_MASK, 0xFF);
 define_constant(INST_ARG1_MASK, 0xFF00);
-define_constant(INST_ARG1_SHIFT, 16);
+define_constant(INST_ARG1_SHIFT, 8);
 define_constant(INST_ARG2_MASK, 0xFF0000);
-define_constant(INST_ARG2_SHIFT, 32);
+define_constant(INST_ARG2_SHIFT, 16);
 
 define_constant(INST_IMM, 1);
 define_constant(INST_STK, 2);
@@ -175,7 +181,7 @@ defun write_memory(memory, address, value)
    return 0;
 }
 
-defun interpret_imm(memory, code, registers, instruction)
+defun interpret_imm(memory, registers, instruction)
 {
    OUTS_LITERAL("imm\n");
    arg1 = (instruction & INST_ARG1_MASK) >> INST_ARG1_SHIFT;
@@ -185,7 +191,7 @@ defun interpret_imm(memory, code, registers, instruction)
    return result ^ result;
 }
 
-defun interpret_add(memory, code, registers, instruction)
+defun interpret_add(memory, registers, instruction)
 {
    OUTS_LITERAL("add\n");
    arg1 = (instruction & INST_ARG1_MASK) >> INST_ARG1_SHIFT;
@@ -201,7 +207,7 @@ defun interpret_add(memory, code, registers, instruction)
    return result ^ result;
 }
 
-defun interpret_stk(memory, code, registers, instruction)
+defun interpret_stk(memory, registers, instruction)
 {
    OUTS_LITERAL("stk\n");
    arg1 = (instruction & INST_ARG1_MASK) >> INST_ARG1_SHIFT;
@@ -233,7 +239,7 @@ defun interpret_stk(memory, code, registers, instruction)
    return (pop ^ pop) + (push ^ push);
 }
 
-defun interpret_stm(memory, code, registers, instruction)
+defun interpret_stm(memory, registers, instruction)
 {
    OUTS_LITERAL("stm\n");
 
@@ -247,7 +253,7 @@ defun interpret_stm(memory, code, registers, instruction)
    return result^result;
 }
 
-defun interpret_ldm(memory, code, registers, instruction)
+defun interpret_ldm(memory, registers, instruction)
 {
    OUTS_LITERAL("ldm\n");
 
@@ -262,7 +268,7 @@ defun interpret_ldm(memory, code, registers, instruction)
    return result ^ result;
 }
 
-defun interpret_cmp(memory, code, registers, instruction)
+defun interpret_cmp(memory, registers, instruction)
 {
    OUTS_LITERAL("cmp\n");
 
@@ -303,7 +309,7 @@ defun interpret_cmp(memory, code, registers, instruction)
    return result ^ result;
 }
 
-defun interpret_jmp(memory, code, registers, instruction)
+defun interpret_jmp(memory, registers, instruction)
 {
    OUTS_LITERAL("jmp\n");
    flags = (instruction & INST_ARG1_MASK) >> INST_ARG1_SHIFT;
@@ -331,16 +337,17 @@ defun interpret_jmp(memory, code, registers, instruction)
    return jump ^ jump;
 }
 
-defun interpret_sys(memory, code, registers, instruction)
+defun interpret_sys(memory, registers, instruction)
 {
-   OUTS_LITERAL("TODO sys\n");
+   OUTS_LITERAL("sys\n");
 
    arg1 = (instruction & INST_ARG1_MASK) >> INST_ARG1_SHIFT;
    arg2 = (instruction & INST_ARG2_MASK) >> INST_ARG2_SHIFT;
-
+   OUTD(arg1);
    open_output = 0;
    if (arg1 & SYS_OPEN)
    {
+      OUTS_LITERAL("open\n");
       // arg2 = open_file(&reg_a, reg_b)
       fname = memory[registers[REG_A]];
       flags = registers[REG_B];
@@ -352,101 +359,153 @@ defun interpret_sys(memory, code, registers, instruction)
    write_output = 0;
    if (arg1 & SYS_WRITE)
    {
+      OUTS_LITERAL("write\n");
       // arg2 = write_bytes(reg_a, &reg_b, min(reg_c, WORD_SIZE));
       data = memory[registers[REG_B]];
       len = min(registers[REG_C], WORD_SIZE);
-      fd = memory[registers[REG_A]];
+      fd = registers[REG_A];
 
+      OUTD(fd);
+      OUTD(data);
+      OUTD(len);
       write_output = write_bytes(fd, data, len);
       write_output = write_register(registers, arg2, write_output);
    }
 
-   return write_output ^ open_output;
+   exit_output = 0;
+   if (arg1 & SYS_EXIT)
+   {
+      OUTS_LITERAL("exit\n");
+      registers[REG_I] = MEM_LENGTH;
+      write_register(registers, arg2, 0);
+      exit_output = 0;
+   }
+
+   return write_output ^ open_output ^ exit_output;
 }
 
 
-defun interpret_instruction(memory, code, registers, instruction)
+defun interpret_instruction(memory, registers, instruction)
 {
    op = instruction & INST_OP_MASK;
    imm_output = 0;
    if (op & INST_IMM)
    {
-      imm_output = interpret_imm(memory, code, registers, instruction);
+      imm_output = interpret_imm(memory, registers, instruction);
    }
 
    add_output = 0;
    if (op & INST_ADD)
    {
-      add_output = interpret_add(memory, code, registers, instruction);
+      add_output = interpret_add(memory, registers, instruction);
    }
 
    stk_output = 0;
    if (op & INST_STK)
    {
-      stk_output = interpret_stk(memory, code, registers, instruction);
+      stk_output = interpret_stk(memory, registers, instruction);
    }
 
    stm_output = 0;
    if (op & INST_STM)
    {
-      stm_output = interpret_stm(memory, code, registers, instruction);
+      stm_output = interpret_stm(memory, registers, instruction);
    }
 
    ldm_output = 0;
    if (op & INST_LDM)
    {
-      ldm_output = interpret_ldm(memory, code, registers, instruction);
+      ldm_output = interpret_ldm(memory, registers, instruction);
    }
 
    cmp_output = 0;
    if (op & INST_CMP)
    {
-      cmp_output = interpret_cmp(memory, code, registers, instruction);
+      cmp_output = interpret_cmp(memory, registers, instruction);
    }
 
    jmp_output = 0;
    if (op & INST_JMP)
    {
-      jmp_output = interpret_jmp(memory, code, registers, instruction);
+      jmp_output = interpret_jmp(memory, registers, instruction);
    }
 
    sys_output = 0;
    if (op & INST_SYS)
    {
-      sys_output = interpret_sys(memory, code, registers, instruction);
+      sys_output = interpret_sys(memory, registers, instruction);
    }
 
    return add_output ^ stk_output ^ stm_output ^ ldm_output ^ cmp_output ^ jmp_output ^ sys_output;
 }
 
-defun interpreter_loop(memory, code, registers)
+defun interpreter_loop(memory, registers)
 {
    i = 0;
-   while(registers[REG_I] != CODE_LENGTH)
+   while(registers[REG_I] != MEM_LENGTH)
    {
       OUTS_LITERAL("Inst\n");
       ip = registers[REG_I];
-      registers[REG_I] = ip + WORD_SIZE;
-      instruction = code[ip % CODE_LENGTH];
-      result = interpret_instruction(memory, code, registers, instruction);
+      OUTD(ip);
+      registers[REG_I] = ip + 3;
+      instruction = memory[ip % MEM_LENGTH];
+      OUTD(instruction);
+      result = interpret_instruction(memory, registers, instruction);
+      registers = registers + (result ^ result);
       i = i + 1 + (result ^ result);
    }
    return i ^ i;
 }
 
+defun load_code(filename, code)
+{
+   fd = open_file(filename, O_RDONLY);
+   if (fd == -1)
+   {
+      OUTS_LITERAL("filename does not exist");
+      return code;
+   }
+   else
+   {
+      i = 0;
+      byte = read_bytes(fd, 1);
+      while (byte != -1)
+      {
+         OUTD(byte);
+         code[i] = byte;
+
+         i = i + 1;
+         if (i == MEM_LENGTH)
+         {
+            byte = -1;
+         }
+         else
+         {
+            byte = read_bytes(fd, 1);
+         }
+         code = code;
+      }
+      return code + (i ^ i) + (byte ^ byte);
+   }
+}
+
 defun main(arg)
 {
+   filename = arg_to_arg(arg);
    memory = NEW_ARRAY(MEM_LENGTH);
-   code = NEW_ARRAY(CODE_LENGTH);
    registers = NEW_ARRAY(REGISTER_LENGTH);
    registers[REG_I] = 0;
 
-   code[0] = 0xFFFFDF;
+   memory = load_code(filename, memory);
+   if (memory == memory)
+   {
+      OUTD(memory[0]);
+      OUTD(memory[8]);
+   }
 
-   // load code somehow
    OUTS_LITERAL("In the VM\n");
 
-   result = interpreter_loop(memory, code, registers);
+   result = interpreter_loop(memory, registers);
    return result;
 }
 export main;

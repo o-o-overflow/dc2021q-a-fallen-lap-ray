@@ -1,0 +1,25 @@
+# store "A" at zero
+imm a 0x41
+imm b 0
+stm b a
+
+imm c 1
+add b c
+imm a 0x44
+stm b a
+
+add b c
+imm a 0x41
+stm b a
+
+add b c
+imm a 0x4D
+stm b a
+
+
+imm a 1
+imm b 0
+imm c 4
+sys write b
+sys exit c
+imm,add,stm b c
