@@ -20,7 +20,7 @@ define_constant(WORD_SIZE, 8);
 define_constant(INSTRUCTION_SIZE, 3);
 define_constant(MEM_LENGTH, 512);
 
-define_constant(STACK_DIRECTION, 1 * WORD_SIZE);
+define_constant(STACK_DIRECTION, -1 * WORD_SIZE);
 
 define_constant(REGISTER_LENGTH, 7 * WORD_SIZE);
 define_constant(REG_A, 0 * WORD_SIZE);
@@ -259,10 +259,14 @@ defun interpret_ldm(memory, registers, instruction)
 
    arg1 = (instruction & INST_ARG1_MASK) >> INST_ARG1_SHIFT;
    arg2 = (instruction & INST_ARG2_MASK) >> INST_ARG2_SHIFT;
+   OUTD(arg1);
+   OUTD(arg2);
 
    arg2_value = read_register(registers, arg2);
+   OUTD(arg2_value);
 
    memory_value = read_memory(memory, arg2_value);
+   OUTD(memory_value);
 
    result = write_register(registers, arg1, memory_value);
    return result ^ result;
@@ -320,8 +324,9 @@ defun interpret_jmp(memory, registers, instruction)
    jump = 0;
    if ((flags == 0) | (flags & registers[REG_F]))
    {
-      OUTS_LITERAL("taken\n");
       dest = read_register(registers, arg2);
+      OUTS_LITERAL("taken\n");
+      OUTD(dest);
       registers[REG_I] = dest;
       if (1)
       {
@@ -495,13 +500,9 @@ defun main(arg)
    memory = NEW_ARRAY(MEM_LENGTH);
    registers = NEW_ARRAY(REGISTER_LENGTH);
    registers[REG_I] = 0;
+   registers[REG_S] = MEM_LENGTH;
 
    memory = load_code(filename, memory);
-   if (memory == memory)
-   {
-      OUTD(memory[0]);
-      OUTD(memory[8]);
-   }
 
    OUTS_LITERAL("In the VM\n");
 

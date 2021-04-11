@@ -1,0 +1,14 @@
+# Print out "adam" which is located in .data
+print:
+imm a 1
+imm b adam
+imm d adam_len
+ldm c d
+sys write b
+sys exit c
+imm,add,stm b c
+
+# following is the .data section where we can use these references in our code
+.data
+adam "adam\n"
+adam_len len(adam)

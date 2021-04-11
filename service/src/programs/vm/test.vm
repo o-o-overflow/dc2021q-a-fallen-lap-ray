@@ -1,6 +1,6 @@
-# store "A" at zero
+# store "A" at 100
 imm a 0x41
-imm b 0
+imm b 100
 stm b a
 
 imm c 1
@@ -15,11 +15,20 @@ stm b a
 add b c
 imm a 0x4D
 stm b a
+imm d print
+jmp 0 d
 
+add b c
+imm a 0x4F
+stm b a
 
+print:
 imm a 1
-imm b 0
+imm d 100
+stk 0 d
+stk b 0
 imm c 4
 sys write b
 sys exit c
 imm,add,stm b c
+
