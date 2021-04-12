@@ -11,6 +11,8 @@ Register = collections.namedtuple('Register', ['name', 'spec'])
 Opcode = collections.namedtuple('Opcode', ['name', 'spec'])
 Syscall = collections.namedtuple('Syscall', ['name', 'spec'])
 Literal = collections.namedtuple('Literal', ['name', 'spec'])
+Flag = collections.namedtuple('Flag', ['name', 'spec'])
+
 Instruction = collections.namedtuple('Instruction', ['opcodes', 'arg1', 'arg2'])
 
 _REGISTER_LIST = [
@@ -36,21 +38,33 @@ _OPCODE_LIST = [
 
 _SYSCALL_LIST = [
     Syscall("open", 1),
+    Syscall("read", 2),
     Syscall("write", 8),
     Syscall("exit", 32),
+]
+
+_FLAG_LIST = [
+    Flag("<", 1),
+    Flag(">", 2),
+    Flag("==", 4),
+    Flag("!=", 8),
+    Flag("=0", 16),
 ]
 
 REGISTERS = { r.name: r for r in _REGISTER_LIST }
 OPCODES = { o.name: o for o in _OPCODE_LIST }
 SYSCALLS = { s.name: s for s in _SYSCALL_LIST }
+FLAGS = { f.name: f for f in _FLAG_LIST }
 
-INSTRUCTION_SIZE = 3
+INSTRUCTION_SIZE = 4
 
 def parse_arg(raw_arg, labels, data_mapping, error_on_fail=True):
     if raw_arg in REGISTERS:
         return REGISTERS[raw_arg]
     elif raw_arg in SYSCALLS:
         return SYSCALLS[raw_arg]
+    elif raw_arg in FLAGS:
+        return FLAGS[raw_arg]
     elif raw_arg in data_mapping:
         val = data_mapping[raw_arg]
         return Literal(str(val), val)
@@ -127,7 +141,8 @@ def output_instructions(instructions, data, output_file):
             for opcode in inst.opcodes:
                 opcode_value ^= opcode.spec
 
-            instruction_value = struct.pack('<BBB',
+            l.debug(f"{opcode_value=} {inst.arg1.spec=} {inst.arg2.spec=}")
+            instruction_value = struct.pack('<BBH',
                                             opcode_value,
                                             inst.arg1.spec,
                                             inst.arg2.spec)
@@ -187,7 +202,7 @@ def parse_data_segment(lines):
             in_data_segment = True
             data_offset = len(filtered_lines) * INSTRUCTION_SIZE
         elif in_data_segment:
-            args = line.split()
+            args = line.split(maxsplit=1)
             if len(args) != 2:
                 l.error(f"Malformed {args} in the .data segment")
                 sys.exit(-1)
@@ -197,6 +212,7 @@ def parse_data_segment(lines):
                 sys.exit(-1)
             raw_value = args[1]
             value = eval(raw_value, data_values)
+            l.debug(f"{raw_value=} {value=}")
             data_values[name] = value
 
             if isinstance(value, int):

@@ -1,0 +1,23 @@
+# read in input from stdin
+imm a 0
+imm b buff
+imm d buff_len
+ldm c d
+sys read d
+
+# save bytes read
+imm a input_size
+stm a d
+
+# print out the input
+imm a 1
+imm b buff
+imm d input_size
+ldm c d
+sys write d
+
+sys exit c
+.data
+buff "\x00"*10
+buff_len len(buff)
+input_size 0

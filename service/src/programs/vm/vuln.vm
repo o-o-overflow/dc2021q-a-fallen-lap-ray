@@ -1,0 +1,84 @@
+main:
+
+imm a welcome
+stk 0 a
+imm a welcome_len
+stk 0 a
+imm a _main_after_print_welcome
+stk 0 a
+imm a print_str
+jmp 0 a
+_main_after_print_welcome:
+stk a 0
+stk a 0
+
+imm a _main_after_menu
+stk 0 a
+imm a menu_loop
+jmp 0 a
+
+_main_after_menu:
+imm a end
+jmp 0 a
+
+end:
+sys exit c
+
+
+menu_loop:
+stk 0 b
+stk 0 c
+stk 0 d
+
+_menu_start:
+imm a menu
+stk 0 a
+imm a menu_len
+stk 0 a
+imm a _menu_loop_after_print
+stk 0 a
+imm a print_str
+jmp 0 a
+_menu_loop_after_print:
+# need to read in the input, 
+stk a 0
+stk a 0
+
+
+stk d 0
+stk c 0
+stk b 0
+stk i 0
+
+
+
+
+print_str:
+stk 0 b
+stk 0 c
+stk 0 d
+
+# size is s+(5*8)
+imm a 32
+add a s
+ldm d a
+
+# str_addr is s+(6*8)
+imm a 40
+add a s
+ldm b a
+
+imm a 1
+ldm c d
+sys write b
+
+stk d 0
+stk c 0
+stk b 0
+stk i 0
+
+.data
+welcome "Welcome to the droid logging functionality.\n"
+welcome_len len(welcome)
+menu "Choose:\n(1) New log\n(2) List logs\n(3) View log\n(4) Quit\n"
+menu_len len(menu)

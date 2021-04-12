@@ -1,0 +1,37 @@
+# set counter to 0
+imm d 0
+
+start:
+imm a 10
+cmp a d
+imm a end
+jmp < a
+
+# print
+imm a 1
+imm b buf
+imm c buf_len
+sys write b
+
+# increment buf[0] by 1
+imm a buf
+ldm b a
+imm a 1
+add b a
+imm a buf
+stm a b
+
+# increment
+imm a 1
+add d 1
+
+# jump back
+imm a start
+jmp 0 a
+
+end:
+sys exit c
+
+.data
+buf "a\n"
+buf_len len(buf)
