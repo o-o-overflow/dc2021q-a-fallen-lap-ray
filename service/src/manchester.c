@@ -17,8 +17,8 @@
 #include "arrays.h"
 #include "queue.h"
 
-#define SIZE_MATCHING_STORE 2048
-#define MAX_QUEUE_SIZE 1024
+#define SIZE_MATCHING_STORE 4096
+#define MAX_QUEUE_SIZE 2048
 
 #ifdef DEBUG
 void print_token(token_type token)
