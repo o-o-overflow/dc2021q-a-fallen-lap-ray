@@ -3,6 +3,7 @@ main:
 imm a welcome
 stk 0 a
 imm a welcome_len
+ldm a a
 stk 0 a
 imm a _main_after_print_welcome
 stk 0 a
@@ -34,6 +35,7 @@ _menu_start:
 imm a menu
 stk 0 a
 imm a menu_len
+ldm a a
 stk 0 a
 imm a _menu_loop_after_print
 stk 0 a
@@ -44,41 +46,287 @@ _menu_loop_after_print:
 stk a 0
 stk a 0
 
+# Read in two bytes, first is input, second is newline
+imm a 0
+imm b menu_input
+imm c 2
+sys read d
+
+# zero out the last byte (by overwriting all the rest
+imm a 1
+add b a
+imm a 0
+stm b a
+
+imm b menu_input
+ldm b b
+
+# 0x31 is 1
+imm a 0x31
+cmp a b
+imm a _menu_call_new_log
+jmp == a
+
+# 0x32 is 2
+imm a 0x32
+cmp a b
+imm a _menu_list_logs
+jmp == a
+
+# 0x33 is 4
+imm a 0x33
+cmp a b
+imm a _menu_view_log
+jmp == a
+
+# fall through, say goodbye then bounce
+imm a menu_goodbye
+stk 0 a
+imm a menu_goodbye_len
+ldm a a
+stk 0 a
+imm a _main_after_print_goodbye
+stk 0 a
+imm a print_str
+jmp 0 a
+_main_after_print_goodbye:
+stk b 0
+stk c 0
+imm a _menu_return
+jmp 0 a
+
+_menu_call_new_log:
+# call new log
+imm a _menu_start
+stk 0 a
+imm a new_log
+jmp 0 a
+
+_menu_list_logs:
+# call list logs
+imm b _menu_start
+jmp 0 b
+
+_menu_view_log:
+# call view log
+imm c _menu_start
+jmp 0 c
+
+_menu_return:
+stk d 0
+stk c 0
+stk b 0
+stk i 0
+
+new_log:
+stk 0 b
+stk 0 c
+stk 0 d
+
+# store where the stack was in d
+stm s s
+ldm d s
+
+# # Make room on the stack
+imm b negative_log_struct_size
+ldm a b
+add s a
+
+# ask for the log content
+
+## ask for the name
+imm a log_name
+stk 0 a
+imm a log_name_len
+ldm a a
+stk 0 a
+imm a _new_log_after_log_name
+stk 0 a
+imm a print_str
+jmp 0 a
+_new_log_after_log_name:
+stk b 0
+stk b 0
+
+# this is a test, fix later
+imm a 0
+stk 0 a
+imm a menu_input
+stk 0 a
+imm a 5
+stk 0 a
+imm a _new_log_after_read_until_newline
+stk 0 a
+imm a read_until_newline
+jmp 0 a
+_new_log_after_read_until_newline:
+stk b 0
+stk b 0
+stk b 0
+
+# a should have the number read
+imm b 0
+add b a
+
+imm a menu_input
+stk 0 a
+stk 0 b
+imm a _new_log_test_print_after
+stk 0 a
+imm a print_str
+jmp 0 a
+
+_new_log_test_print_after:
+stk b 0
+stk b 0
+
+
+# store it to global array
+
+_new_log_return:
+
+# restore the previous stack
+stm s d
+ldm s s
 
 stk d 0
 stk c 0
 stk b 0
 stk i 0
 
-
-
-
+# void print_str(char* s, int len)
 print_str:
 stk 0 b
 stk 0 c
 stk 0 d
 
-# size is s+(5*8)
+# str_addr is s+(5*8)
+imm a 40
+add a s
+ldm b a
+
+# size is s+(4*8)
 imm a 32
 add a s
 ldm d a
 
-# str_addr is s+(6*8)
-imm a 40
-add a s
-ldm b a
+# actual size is in d, but write needs a pointer
+stk 0 d
+imm d 0
+add d s
 
 imm a 1
 ldm c d
 sys write b
 
+# pop size off stack
+stk a 0
+
 stk d 0
 stk c 0
 stk b 0
 stk i 0
+
+# int read_until_newline(int fd, char* mem, int maxbytes)
+read_until_newline:
+stk 0 b
+stk 0 c
+stk 0 d
+
+# d is counter
+imm d 0
+
+_read_until_newline_start:
+
+# maxbytes is s+(4*8)
+imm a 32
+add a s
+ldm b a
+
+cmp d b
+imm a _read_until_newline_end
+jmp == a
+
+# mem is s+(5*8)
+imm a 40
+add a s
+ldm b a
+
+# mem + d (counter)
+add b d
+
+# One byte
+imm c 1
+
+# fd is s+(6*8)
+imm a 48
+add a s
+ldm a a
+
+sys read a
+
+# check the byte that we just read, is it a newline?
+imm a 0
+stk 0 a
+
+# copy the bytes onto the stack
+ldm a b
+stk 0 a
+
+imm a 1
+add a s
+
+imm c 0
+stm a c
+
+stk b 0
+stk a 0
+
+# b should now have our new character
+
+imm a 0x0a
+cmp a b
+imm a _read_until_newline_end
+jmp == a
+
+# increment and jump back
+imm a 1
+add d a
+imm a _read_until_newline_start
+jmp 0 a
+
+_read_until_newline_end:
+# move counter into a to return
+stk 0 d
+stk a 0
+
+stk d 0
+stk c 0
+stk b 0
+stk i 0
+
+# Log "struct" format
+# eight bytes name
+# name len (8 bytes)
+# 32 bytes content
+# content len (8 bytes)
+# sizeof(struct log) = 56 bytes
+
 
 .data
 welcome "Welcome to the droid logging functionality.\n"
 welcome_len len(welcome)
 menu "Choose:\n(1) New log\n(2) List logs\n(3) View log\n(4) Quit\n"
 menu_len len(menu)
+menu_input "\x00"*9
+menu_input_len len(menu_input)
+menu_goodbye "So long\n"
+menu_goodbye_len len(menu_goodbye)
+log_struct_size 56
+negative_log_struct_size -log_struct_size
+name_offset 0
+name_len_offset 8
+content_offset 16
+content_len_offset 48
+log_name "What is the name of the log?\n"
+log_name_len len(log_name)

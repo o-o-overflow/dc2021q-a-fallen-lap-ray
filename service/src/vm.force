@@ -180,7 +180,10 @@ defun read_memory(memory, address)
 defun write_memory(memory, address, value)
 {
    memory[address] = value;
-   return 0;
+   if (memory == memory)
+   {
+      return memory[address];
+   }
 }
 
 defun interpret_imm(memory, registers, instruction)
@@ -209,6 +212,12 @@ defun interpret_add(memory, registers, instruction)
    arg2_value = read_register(registers, arg2);
 
    new_value = arg1_value + arg2_value;
+   if (TRACE)
+   {
+      OUTD(arg1_value);
+      OUTD(arg2_value);
+      OUTD(new_value);
+   }
 
    result = write_register(registers, arg1, new_value);
 
@@ -228,6 +237,10 @@ defun interpret_stk(memory, registers, instruction)
    if (arg1)
    {
       // This is a pop
+      if (TRACE)
+      {
+         OUTS_LITERAL("pop\n");
+      }
       stack_addr = registers[REG_S];
       stack_value = read_memory(memory, stack_addr);
       result = write_register(registers, arg1, stack_value);
@@ -239,6 +252,10 @@ defun interpret_stk(memory, registers, instruction)
    if (arg2)
    {
       // this is a push
+      if (TRACE)
+      {
+         OUTS_LITERAL("push\n");
+      }
       arg2_value = read_register(registers, arg2);
       stack_addr = registers[REG_S] + STACK_DIRECTION;
 
@@ -261,8 +278,20 @@ defun interpret_stm(memory, registers, instruction)
    arg1 = (instruction & INST_ARG1_MASK) >> INST_ARG1_SHIFT;
    arg2 = (instruction & INST_ARG2_MASK) >> INST_ARG2_SHIFT;
 
+   if (TRACE)
+   {
+      OUTD(arg1);
+      OUTD(arg2);
+   }
+
    arg1_value = read_register(registers, arg1);
    arg2_value = read_register(registers, arg2);
+
+   if (TRACE)
+   {
+      OUTD(arg1_value);
+      OUTD(arg2_value);
+   }
 
    result = write_memory(memory, arg1_value, arg2_value);
    return result^result;
@@ -588,11 +617,16 @@ defun interpreter_loop(memory, registers)
       instruction = memory[ip % MEM_LENGTH];
       if (TRACE)
       {
-         OUTD(instruction);
+         OUTD(instruction & 0xFFFFFFFF);
+         OUTD(registers[REG_S]);
       }
       result = interpret_instruction(memory, registers, instruction);
       registers = registers + (result ^ result);
       i = i + 1 + (result ^ result);
+      if (TRACE)
+      {
+         OUTS("\n"+(i^i));
+      }
    }
    return i ^ i;
 }
