@@ -105,7 +105,9 @@ jmp 0 a
 _menu_list_logs:
 # call list logs
 imm b _menu_start
-jmp 0 b
+stk 0 b
+imm a list_logs
+jmp 0 a
 
 _menu_view_log:
 # call view log
@@ -127,14 +129,36 @@ stk 0 d
 stm s s
 ldm d s
 
-# # Make room on the stack
+# Make room on the stack
 imm b negative_log_struct_size
 ldm a b
 add s a
 
+# First, check and exit early if there's no space for more logs
+
+imm a current_num_logs
+ldm a a
+imm b max_num_logs
+ldm b b
+
+cmp a b
+imm a _new_log_continue
+jmp != a
+
+imm a no_space
+stk 0 a
+imm a no_space_len
+ldm a a
+stk 0 a
+imm a _new_log_return
+stk 0 a
+imm a print_str
+jmp 0 a
+
+_new_log_continue:
 # ask for the log content
 
-## ask for the name
+# ask for the name
 imm a log_name
 stk 0 a
 imm a log_name_len
@@ -148,13 +172,24 @@ _new_log_after_log_name:
 stk b 0
 stk b 0
 
-# this is a test, fix later
+# b is buf
+imm a name_offset
+ldm a a
+add a s
+imm b 0
+add b a
+
+# fd to read from (stdin)
 imm a 0
 stk 0 a
-imm a menu_input
+
+# buf to read into (s+name_offset)
+stk 0 b
+
+# num to read (8 max due to struct)
+imm a 8
 stk 0 a
-imm a 5
-stk 0 a
+
 imm a _new_log_after_read_until_newline
 stk 0 a
 imm a read_until_newline
@@ -164,146 +199,432 @@ stk b 0
 stk b 0
 stk b 0
 
-# a should have the number read
-imm b 0
-add b a
+# a should have the size, store on stack at (s+name_len_offset)
+imm b name_len_offset
+ldm b b
+add b s
+stm b a
 
-imm a menu_input
+# Name successfully read
+
+# # DEBUGGING OUTPUT, TODO: REMOVE
+
+# # buf into b
+# imm a name_offset
+# ldm a a
+# add a s
+# imm b 0
+# add b a
+
+# # length into c
+# imm a name_len_offset
+# ldm a a
+# add a s
+# ldm c a
+
+# # push char* name
+# stk 0 b
+
+# # push length of name
+# stk 0 c
+
+# imm a _new_log_test_print_after
+# stk 0 a
+# imm a print_str
+# jmp 0 a
+
+# _new_log_test_print_after:
+# stk b 0
+# stk b 0
+
+## ask for the content
+imm a log_content
 stk 0 a
-stk 0 b
-imm a _new_log_test_print_after
+imm a log_content_len
+ldm a a
+stk 0 a
+imm a _new_log_after_log_content
 stk 0 a
 imm a print_str
 jmp 0 a
-
-_new_log_test_print_after:
+_new_log_after_log_content:
 stk b 0
 stk b 0
 
+
+# b is buf
+imm a content_offset
+ldm a a
+add a s
+imm b 0
+add b a
+
+# fd to read from (stdin)
+imm a 0
+stk 0 a
+
+# buf to read into (s+name_offset)
+stk 0 b
+
+# num to read (32 max due to struct)
+imm a 32
+stk 0 a
+
+imm a _new_log_after_read_until_newline_content
+stk 0 a
+imm a read_until_newline
+jmp 0 a
+
+_new_log_after_read_until_newline_content:
+stk b 0
+stk b 0
+stk b 0
+
+# a should have the size, store on stack at (s+content_len_offset)
+imm b content_len_offset
+ldm b b
+add b s
+stm b a
+
+# Content successfully read
+
+# # DEBUGGING OUTPUT, TODO: REMOVE
+
+# # buf into b
+# imm a content_offset
+# ldm a a
+# add a s
+# imm b 0
+# add b a
+
+# # length into c
+# imm a content_len_offset
+# ldm a a
+# add a s
+# ldm c a
+
+# # push char* name
+# stk 0 b
+
+# # push length of name
+# stk 0 c
+
+# imm a _new_log_test_print_after_content
+# stk 0 a
+# imm a print_str
+# jmp 0 a
+
+# _new_log_test_print_after_content:
+# stk b 0
+# stk b 0
 
 # store it to global array
+imm b log_struct_size
+ldm b b
+
+imm a current_num_logs
+ldm a a
+
+# calc the index = mult(log_struct_size, current_num_logs)
+
+stk 0 a
+stk 0 b
+imm a _new_log_after_mult
+stk 0 a
+imm a mult
+jmp 0 a
+
+_new_log_after_mult:
+stk b 0
+stk b 0
+
+# a has the index into logs
+imm b logs
+add b a
+
+# b is the buf we want to write to, d is on the stack
+
+# save d, which is the frame pointer
+stk 0 d
+
+# Copy from stack into buf
+
+imm d 8
+add d s
+ldm c d
+stm b c
+
+# increment both dest and buff
+imm a 8
+add b a
+add d a
+
+# copy
+ldm c d
+stm b c
+
+# increment
+add b a
+add d a
+
+# copy
+ldm c d
+stm b c
+
+# increment
+add b a
+add d a
+
+# copy
+ldm c d
+stm b c
+
+# increment
+add b a
+add d a
+
+# copy
+ldm c d
+stm b c
+
+# increment
+add b a
+add d a
+
+# copy
+ldm c d
+stm b c
+
+# increment
+add b a
+add d a
+
+# copy
+ldm c d
+stm b c
+
+# Should have copied 7*8 (56) total bytes to the global buffer
+
+# DEBUGGING OUTPUT, straight output the first 56 bytes of logs
+# imm a logs
+# stk 0 a
+# imm a 56
+# stk 0 a
+# imm a _new_log_after_debug_output
+# stk 0 a
+# imm a print_str
+# jmp 0 a
+# _new_log_after_debug_output:
+# stk a 0
+# stk a 0
+
+# restore the fp
+stk d 0
+
+# increment the current_num_logs
+imm a current_num_logs
+ldm a a
+imm b 1
+add b a
+imm a current_num_logs
+stm a b
+
 
 _new_log_return:
 
 # restore the previous stack
-stm s d
-ldm s s
+imm s 0
+add s d
 
 stk d 0
 stk c 0
 stk b 0
 stk i 0
 
-# void print_str(char* s, int len)
-print_str:
+# void list_logs()
+list_logs:
 stk 0 b
 stk 0 c
 stk 0 d
 
-# str_addr is s+(5*8)
-imm a 40
-add a s
-ldm b a
-
-# size is s+(4*8)
-imm a 32
-add a s
-ldm d a
-
-# actual size is in d, but write needs a pointer
-stk 0 d
-imm d 0
-add d s
-
-imm a 1
-ldm c d
-sys write b
-
-# pop size off stack
+# Print out "Logs:\n"
+imm a list_message
+stk 0 a
+imm a list_message_len
+ldm a a
+stk 0 a
+imm a _list_logs_after_print_logs
+stk 0 a
+imm a print_str
+jmp 0 a
+_list_logs_after_print_logs:
+stk a 0
 stk a 0
 
-stk d 0
-stk c 0
-stk b 0
-stk i 0
+# COUNTER IS b, DO NOT CHANGE
+imm b 0
 
-# int read_until_newline(int fd, char* mem, int maxbytes)
-read_until_newline:
-stk 0 b
-stk 0 c
-stk 0 d
-
-# d is counter
-imm d 0
-
-_read_until_newline_start:
-
-# maxbytes is s+(4*8)
-imm a 32
-add a s
-ldm b a
-
-cmp d b
-imm a _read_until_newline_end
-jmp == a
-
-# mem is s+(5*8)
-imm a 40
-add a s
-ldm b a
-
-# mem + d (counter)
-add b d
-
-# One byte
-imm c 1
-
-# fd is s+(6*8)
-imm a 48
-add a s
+_list_logs_start:
+imm a current_num_logs
 ldm a a
 
-sys read a
-
-# check the byte that we just read, is it a newline?
-imm a 0
-stk 0 a
-
-# copy the bytes onto the stack
-ldm a b
-stk 0 a
-
-imm a 1
-add a s
-
-imm c 0
-stm a c
-
-stk b 0
-stk a 0
-
-# b should now have our new character
-
-imm a 0x0a
 cmp a b
-imm a _read_until_newline_end
+imm a _list_logs_end
 jmp == a
 
-# increment and jump back
+# print "("
+imm a 0x28
+stk 0 a
+imm a 0
+add a s
+stk 0 a
 imm a 1
-add d a
-imm a _read_until_newline_start
+stk 0 a
+imm a _list_logs_after_open_paren
+stk 0 a
+imm a print_str
 jmp 0 a
 
-_read_until_newline_end:
-# move counter into a to return
+_list_logs_after_open_paren:
+stk a 0
+stk a 0
+stk a 0
+
+# print counter + 1
+imm a 1
+add a b
+stk 0 a
+imm a _list_logs_after_print_counter
+stk 0 a
+imm a print_int
+jmp 0 a
+_list_logs_after_print_counter:
+stk a 0
+
+# print ") "
+imm a end_paren
+stk 0 a
+imm a end_paren_len
+ldm a a
+stk 0 a
+imm a _list_logs_after_close_paren
+stk 0 a
+imm a print_str
+jmp 0 a
+
+_list_logs_after_close_paren:
+stk a 0
+stk a 0
+
+
+# calc counter * log_struct_size
+imm a log_struct_size
+ldm a a
+
+stk 0 b
+stk 0 a
+imm a _list_logs_after_mult
+stk 0 a
+imm a mult
+jmp 0 a
+
+_list_logs_after_mult:
+stk c 0
+stk c 0
+
+# a has the offset
+imm c logs
+add c a
+# c is now logs+offset
+
+stk 0 c
+imm a _list_logs_after_print
+stk 0 a
+imm a print_log_name
+jmp 0 a
+
+_list_logs_after_print:
+stk a 0
+
+# print newline
+imm a 0xa
+stk 0 a
+imm a 0
+add a s
+stk 0 a
+imm a 1
+stk 0 a
+imm a _list_logs_after_newline
+stk 0 a
+imm a print_str
+jmp 0 a
+_list_logs_after_newline:
+stk a 0
+stk a 0
+stk a 0
+
+
+# increment the counter
+imm a 1
+add b a
+
+imm a _list_logs_start
+jmp 0 a
+
+_list_logs_end:
+
+stk d 0
+stk c 0
+stk b 0
+stk i 0
+
+# void print_log_name(void* log)
+print_log_name:
+stk 0 b
+stk 0 c
 stk 0 d
+
+# log is s+(4*8)
+imm a 32
+add a s
+ldm c a
+
+imm a name_offset
+ldm a a
+add a c
+# a is now log+name_offset
+
+imm d name_len_offset
+ldm d d
+add d c
+# d is now log+name_len_offset
+
+# push buf
+stk 0 a
+# push len
+ldm d d
+stk 0 d
+
+imm a _print_name_after_print_str
+stk 0 a
+imm a print_str
+jmp 0 a
+_print_name_after_print_str:
+stk a 0
 stk a 0
 
 stk d 0
 stk c 0
 stk b 0
 stk i 0
+
+print_log_content:
+# TODO
+
+.include print_str.vm
+.include print_int.vm
+.include read_until_newline.vm
+.include mult.vm
 
 # Log "struct" format
 # eight bytes name
@@ -330,3 +651,14 @@ content_offset 16
 content_len_offset 48
 log_name "What is the name of the log?\n"
 log_name_len len(log_name)
+log_content "What is the content of the log?\n"
+log_content_len len(log_content)
+current_num_logs 0
+max_num_logs 5
+logs "\x00"*(max_num_logs*log_struct_size)
+end_paren ") "
+end_paren_len len(end_paren)
+no_space "No space for more logs\n"
+no_space_len len(no_space)
+list_message "Logs:\n"
+list_message_len len(list_message)

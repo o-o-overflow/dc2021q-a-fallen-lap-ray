@@ -1,0 +1,32 @@
+# void print_str(char* s, int len)
+print_str:
+stk 0 b
+stk 0 c
+stk 0 d
+
+# str_addr is s+(5*8)
+imm a 40
+add a s
+ldm b a
+
+# size is s+(4*8)
+imm a 32
+add a s
+ldm d a
+
+# actual size is in d, but write needs a pointer
+stk 0 d
+imm d 0
+add d s
+
+imm a 1
+ldm c d
+sys write b
+
+# pop size off stack
+stk a 0
+
+stk d 0
+stk c 0
+stk b 0
+stk i 0

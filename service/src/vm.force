@@ -453,7 +453,7 @@ defun interpret_sys(memory, registers, instruction)
       {
          OUTS_LITERAL("write\n");
       }
-      // arg2 = write_bytes(reg_a, &reg_b, min(reg_c, WORD_SIZE));
+      // arg2 = write_bytes(reg_a, &reg_b, reg_c);
       data_addr = registers[REG_B];
       len = registers[REG_C];
       fd = registers[REG_A];

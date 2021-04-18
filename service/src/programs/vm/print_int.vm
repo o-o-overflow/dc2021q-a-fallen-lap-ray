@@ -1,0 +1,55 @@
+# void print_int(int i)
+# NOTE: only prints 0 through 10
+print_int:
+stk 0 b
+stk 0 c
+stk 0 d
+
+# i is s+(4*8)
+imm a 32
+add a s
+ldm b a
+
+imm a 9
+cmp b a
+imm a _print_int_10_or_greater
+jmp > a
+
+# print digits 0 through 9
+imm c 0x30
+add c b
+
+# num_to_print is 1
+imm d 1
+
+imm a _print_the_int
+jmp 0 a
+
+_print_int_10_or_greater:
+imm c 0x3031
+imm d 2
+
+_print_the_int:
+# c has the string to print and d has the size
+
+# buf is on the stack
+stk 0 c
+imm b 0
+add b s
+
+# size is in c
+imm c 0
+add c d
+
+# fd (1, std out)
+imm a 1
+sys write b
+
+# pop buf off stack
+stk a 0
+
+_print_int_end:
+stk d 0
+stk c 0
+stk b 0
+stk i 0

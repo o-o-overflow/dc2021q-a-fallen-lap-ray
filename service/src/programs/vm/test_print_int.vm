@@ -1,0 +1,31 @@
+imm a 0
+stk 0 a
+imm a _after_print_0
+stk 0 a
+imm a print_int
+jmp 0 a
+_after_print_0:
+stk a 0
+
+imm a 5
+stk 0 a
+imm a _after_print_5
+stk 0 a
+imm a print_int
+jmp 0 a
+_after_print_5:
+stk a 0
+
+imm a 10
+stk 0 a
+imm a _after_print_10
+stk 0 a
+imm a print_int
+jmp 0 a
+_after_print_10:
+stk a 0
+
+sys exit c
+
+.include print_int.vm
+

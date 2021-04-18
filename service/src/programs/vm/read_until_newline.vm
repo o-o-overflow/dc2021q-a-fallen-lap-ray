@@ -1,0 +1,77 @@
+# int read_until_newline(int fd, char* mem, int maxbytes)
+read_until_newline:
+stk 0 b
+stk 0 c
+stk 0 d
+
+# d is counter
+imm d 0
+
+_read_until_newline_start:
+
+# maxbytes is s+(4*8)
+imm a 32
+add a s
+ldm b a
+
+cmp d b
+imm a _read_until_newline_end
+jmp == a
+
+# mem is s+(5*8)
+imm a 40
+add a s
+ldm b a
+
+# mem + d (counter)
+add b d
+
+# One byte
+imm c 1
+
+# fd is s+(6*8)
+imm a 48
+add a s
+ldm a a
+
+sys read a
+
+# check the byte that we just read, is it a newline?
+imm a 0
+stk 0 a
+
+# copy the bytes onto the stack
+ldm a b
+stk 0 a
+
+imm a 1
+add a s
+
+imm c 0
+stm a c
+
+stk b 0
+stk a 0
+
+# b should now have our new character
+
+imm a 0x0a
+cmp a b
+imm a _read_until_newline_end
+jmp == a
+
+# increment and jump back
+imm a 1
+add d a
+imm a _read_until_newline_start
+jmp 0 a
+
+_read_until_newline_end:
+# move counter into a to return
+stk 0 d
+stk a 0
+
+stk d 0
+stk c 0
+stk b 0
+stk i 0

@@ -2,6 +2,7 @@
 import argparse
 import collections
 import logging
+import os
 import struct
 import sys
 
@@ -151,11 +152,30 @@ def output_instructions(instructions, data, output_file):
         output.write(data)
     l.info(f"Program output to {output_file} has {size_inst} bytes code and {len(data)} bytes data total {size_inst+len(data)}")
 
-def parse_labels(input):
+def resolve_includes(lines, filename="__main"):
+    new_lines = []
+    i = 0
+    for line in lines:
+        i += 1
+        line = line.strip()
+
+        if line.startswith(".include"):
+            args = line.split()            
+            l.debug(f"Include {args[1]} found on {filename}:{i}")
+            with open(os.path.dirname(filename) + "/" + args[1], 'r') as included_file:
+                included_lines = resolve_includes(included_file, args[1])
+                new_lines.extend(included_lines)
+        else:
+            new_lines.append(line)
+                
+    return new_lines
+
+            
+def parse_labels(lines):
     filtered_lines = []
     labels = {}
     i = 0
-    for line in input:
+    for line in lines:
         i += 1
         line = line.strip()
         args = line.split()
@@ -237,7 +257,8 @@ def parse_data_segment(lines):
 def main(input_file, output_file):
 
     with open(input_file, 'r') as input:
-        labels, lines = parse_labels(input)
+        lines = resolve_includes(input, input_file)
+        labels, lines = parse_labels(lines)
         data_mapping, data, lines = parse_data_segment(lines)
         instructions = parse_into_instructions(lines, labels, data_mapping, data)
 

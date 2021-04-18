@@ -1,0 +1,48 @@
+# int mult(int b, int c)
+# NOTE: only works for positive integers
+mult:
+stk 0 b
+stk 0 c
+stk 0 d
+
+# d is the counter
+imm d 0
+
+# c is the return value
+imm c 0
+
+_mult_start:
+# second is s+(5*8)
+imm a 40
+add a s
+ldm b a
+
+cmp d b
+imm a _mult_end
+jmp == a
+
+
+# first is s+(4*8)
+imm a 32
+add a s
+ldm b a
+
+# to_return (c) += first
+add c b
+
+imm a 1
+add d a
+
+imm a _mult_start
+jmp 0 a
+
+_mult_end:
+
+# put to_return (c) in the return register (a)
+imm a 0
+add a c
+
+stk d 0
+stk c 0
+stk b 0
+stk i 0
