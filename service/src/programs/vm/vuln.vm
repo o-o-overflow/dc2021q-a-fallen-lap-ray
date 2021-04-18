@@ -112,6 +112,8 @@ jmp 0 a
 _menu_view_log:
 # call view log
 imm c _menu_start
+stk 0 c
+imm c view_log
 jmp 0 c
 
 _menu_return:
@@ -578,6 +580,163 @@ stk c 0
 stk b 0
 stk i 0
 
+view_log:
+stk 0 b
+stk 0 c
+stk 0 d
+
+# print request for index
+imm a index_log_message
+stk 0 a
+imm a index_log_message_len
+ldm a a
+stk 0 a
+imm a _view_log_after_print_log_message
+stk 0 a
+imm a print_str
+jmp 0 a
+_view_log_after_print_log_message:
+stk a 0
+stk a 0
+
+# read in index
+
+# Read in two bytes, first is input, second is newline
+imm a 0
+imm b menu_input
+imm c 2
+sys read d
+
+# zero out the last byte (by overwriting all the rest
+imm a 1
+add b a
+imm a 0
+stm b a
+
+imm b menu_input
+ldm b b
+
+# b is the character that they input, turn it into an offset
+imm a negative_ascii_zero
+ldm a a
+add b a
+
+# b is the log number, turn into offset
+imm a negative_one
+ldm a a
+add b a
+
+# check against the bounds
+imm a 0
+cmp b a
+imm a _view_logs_no_log
+jmp < a
+
+imm a current_num_logs
+ldm a a
+cmp b a
+imm a _view_logs_no_log
+jmp > a
+jmp == a
+
+# Print out the log at the index b
+
+# calc the index = mult(log_struct_size, current_num_logs)
+imm a log_struct_size
+ldm a a
+
+stk 0 b
+stk 0 a
+imm a _view_log_after_mult
+stk 0 a
+imm a mult
+jmp 0 a
+
+_view_log_after_mult:
+stk b 0
+stk b 0
+
+# a has the offset into the logs
+imm b logs
+add b a
+
+# b is the buff
+
+# print name
+stk 0 b
+imm a _view_log_after_print_name
+stk 0 a
+imm a print_log_name
+jmp 0 a
+
+_view_log_after_print_name:
+stk a 0
+
+# print ": "
+imm a view_separator
+stk 0 a
+imm a view_separator_len
+ldm a a
+stk 0 a
+imm a _view_log_after_print_separator
+stk 0 a
+imm a print_str
+jmp 0 a
+_view_log_after_print_separator:
+stk a 0
+stk a 0
+
+# print content
+stk 0 b
+imm a _view_log_after_print_content
+stk 0 a
+imm a print_log_content
+jmp 0 a
+_view_log_after_print_content:
+stk a 0
+
+# print newline
+imm a 0xa
+stk 0 a
+imm a 0
+add a s
+stk 0 a
+imm a 1
+stk 0 a
+imm a _view_log_after_newline
+stk 0 a
+imm a print_str
+jmp 0 a
+_view_log_after_newline:
+stk a 0
+stk a 0
+stk a 0
+
+
+imm a _view_logs_end
+jmp 0 a
+_view_logs_no_log:
+
+imm a no_log_message
+stk 0 a
+imm a no_log_message_len
+ldm a a
+stk 0 a
+imm a _view_log_after_no_log
+stk 0 a
+imm a print_str
+jmp 0 a
+_view_log_after_no_log:
+stk a 0
+stk a 0
+
+_view_logs_end:
+stk d 0
+stk c 0
+stk b 0
+stk i 0
+
+
 # void print_log_name(void* log)
 print_log_name:
 stk 0 b
@@ -618,8 +777,46 @@ stk c 0
 stk b 0
 stk i 0
 
+# void print_log_content(void* log)
 print_log_content:
-# TODO
+stk 0 b
+stk 0 c
+stk 0 d
+
+# log is s+(4*8)
+imm a 32
+add a s
+ldm c a
+
+imm a content_offset
+ldm a a
+add a c
+# a is now log+content_offset
+
+imm d content_len_offset
+ldm d d
+add d c
+# d is now log+content_len_offset
+
+# push buf
+stk 0 a
+# push len
+ldm d d
+stk 0 d
+
+imm a _print_content_after_print_str
+stk 0 a
+imm a print_str
+jmp 0 a
+_print_content_after_print_str:
+stk a 0
+stk a 0
+
+stk d 0
+stk c 0
+stk b 0
+stk i 0
+
 
 .include print_str.vm
 .include print_int.vm
@@ -654,6 +851,7 @@ log_name_len len(log_name)
 log_content "What is the content of the log?\n"
 log_content_len len(log_content)
 current_num_logs 0
+# Due to input parsing constraints, max_num_logs cannot be more than 9
 max_num_logs 5
 logs "\x00"*(max_num_logs*log_struct_size)
 end_paren ") "
@@ -662,3 +860,11 @@ no_space "No space for more logs\n"
 no_space_len len(no_space)
 list_message "Logs:\n"
 list_message_len len(list_message)
+index_log_message "What is the log number?\n"
+index_log_message_len len(index_log_message)
+negative_ascii_zero -0x30
+negative_one -1
+no_log_message "Cannot find that log\n"
+no_log_message_len len(no_log_message)
+view_separator ": "
+view_separator_len len(view_separator)
