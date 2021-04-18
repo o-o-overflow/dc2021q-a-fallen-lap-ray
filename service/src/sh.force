@@ -61,9 +61,10 @@ defun main(arg)
   result = 0;
   while (done == 0)
   {
-    result = prompt(result);
-    result = result ^ result;
-    action = read_line(result);
+    # result = prompt(result);
+    # result = result ^ result;
+    # action = read_line(result);
+    action = "vm p";
     if (strcmp(upcase(action),"HELP") == 0)
     {
       result = output_help(result);
@@ -108,9 +109,17 @@ defun main(arg)
         result = load_file(program, arg);
       }
     }
+    if ((action + (result^result)) == "vm p")
+    {
+       done = 1;
+    }
   }
 
-  done = done ^ done;
-  return done;
+  if (done == 1)
+  {
+     result = load_file("quit", 0);
+     result = result ^ result;
+     return result;
+  }
 }
 export main;

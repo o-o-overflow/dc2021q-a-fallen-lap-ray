@@ -1,0 +1,11 @@
+defun main(arg)
+{
+   output = 0;
+   if (1)
+   {
+      OUTS_LITERAL("Goodbye!\n");
+      output = 1;
+   }
+   return output ^ output;
+}
+export main;
