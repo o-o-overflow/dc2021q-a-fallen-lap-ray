@@ -17,7 +17,9 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install PyYAML coloredlogs
+        pip install PyYAML
+    - name: Prefetch ubuntu's image
+      run: docker pull ubuntu
       
     - name: Run the tests
-      run: ./tester --force-color
+      run: ./tester

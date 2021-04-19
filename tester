@@ -7,10 +7,10 @@ FLAG_RE = r"OOO{[^}]*}\Z"                   # "normal" flag format
 SERVICE_NAME_RE = r"[a-z][a-z0-9-]+\Z"      # so it's the same in Kubernetes, DNS, git, ...
 PUBLIC_FILENAME_RE = r"[a-zA-Z0-9_.@-]+\Z"  # mostly for sanity in setting env vars & co.
 NAME_PREFIX = "dc2021q"                     # for github, image names, etc.
-INTERNAL_SUBDOMAIN = ".lb.31337.ooo"        # for test_deployed (internal by default)
+INTERNAL_SUBDOMAIN = ".proxy.31337.ooo"        # for test_deployed (internal by default)
 PUBLIC_SUBDOMAIN = ".challenges.ooo"        # for test_deployed public
 GITHUB_ORG = "o-o-overflow"                 # Used to enforce the repo name -- we found it useful to have the same name everywhere
-K8S_MASTER = 'root@master.k8s.31337.ooo'    # Used to delete pods on './tester deploy'
+K8S_MASTER = 'master.31337.ooo'    # Used to delete pods on './tester deploy'
 POW_DETECTION_STRING = b"(Pssst, http://oooverflow.io/pow.py)"   # If detected, will test on port+1 (which is expected to have no POW req.)
 REGISTRY = "registry.31337.ooo:5000"
 
@@ -38,16 +38,39 @@ import re
 import os
 import traceback
 
-logging.basicConfig()
-_LOG = logging.getLogger("OOO")
-_LOG.setLevel("DEBUG")
-try:
-    import coloredlogs
-    coloredlogs.install(logger=_LOG, level=_LOG.level)
-except ImportError:
-    pass
+
+def in_github_ci():
+    return os.getenv('GITHUB_ACTIONS') == 'true' and os.getenv('GITHUB_WORKFLOW')
+
+if in_github_ci():
+    class GithubLogFormatter(logging.Formatter):
+        def format(self, r):
+            lvl = "error" if r.levelno>=logging.ERROR else ("warning" if r.levelno>=logging.WARNING else None)
+            if lvl and not getattr(r, "no_github_ci", False):
+                return "::{} file={},line={}::{}".format(lvl, r.pathname, r.lineno, r.getMessage())
+            return super().format(r)  #.getMessage()
+    _LOG = logging.getLogger("OOO")
+    _LOG.setLevel("DEBUG")
+    handler = logging.StreamHandler()
+    handler.setLevel("DEBUG")
+    handler.setFormatter(GithubLogFormatter())
+    _LOG.addHandler(handler)
+else:
+    logging.basicConfig()
+    _LOG = logging.getLogger("OOO")
+    _LOG.setLevel("DEBUG")
+    try:
+        import coloredlogs
+        coloredlogs.install(logger=_LOG, level=_LOG.level)
+    except ImportError:
+        pass
+
+
 
 service_dir = os.path.dirname(__file__)
+git_desc = "didnt_ask_git"
+git_clean = False
+
 
 dsystem = os.system  # But see cmdline options
 def system_without_stdout(cmd):
@@ -82,7 +105,7 @@ def update_myself():
     my_sha256 = file_sha256(__file__)
     try:
         with urllib.request.urlopen(SELFUPDATE_INFO_URL, timeout=5) as u:
-            newinfo = json.load(u)
+            newinfo = json.loads(u.read().decode("utf-8"))
         if newinfo['tester_sha256'].lower() == my_sha256 or newinfo.get("ignore", False):
             return
         _LOG.critical("THERE IS A NEW tester SCRIPT (or yours is different) -- please ./apply_template_commits.sh")
@@ -91,7 +114,7 @@ def update_myself():
         if 'commit_unixdate' in newinfo:
             _LOG.info("The last upstream tester commit happened at " +
                     time.strftime('%a, %d %b %Y %H:%M:%S %Z', time.localtime(newinfo['commit_unixdate'])))
-        if ('CI' in os.environ) or not (sys.stdin.isatty() and sys.stdout.isatty() and sys.stderr.isatty()):
+        if in_github_ci() or ('CI' in os.environ) or not (sys.stdin.isatty() and sys.stdout.isatty() and sys.stderr.isatty()):
             _LOG.warning("Not interactive, I won't ask to upgrade")
             return
         if input("Continue without updating? ") in ['y','Y','yes','YES','Yes']:
@@ -105,6 +128,20 @@ def update_myself():
 
 
 def validate_git():  # Called as part of validate_yaml
+    global git_desc, git_clean
+    try:
+        git_desc = subprocess.check_output(['git','-P','-C',service_dir,
+            'describe','--long','--always','--dirty'], universal_newlines=True).strip()
+        _LOG.info("git description: %s", git_desc)
+        if git_desc.endswith('dirty'):
+            _LOG.info("The git tree is dirty -- that's fine locally, shouldn't happen in the infra")
+            assert not in_github_ci()
+        else:
+            git_clean = True
+    except subprocess.CalledProcessError as e:
+        _LOG.warning('git-describe failed! Are you in git? exit code=%d stdout=%s',
+                e.returncode, e.output)
+        git_desc = "git_describe_errored"
     if not GITHUB_ORG:
         _LOG.debug("No GITHUB_ORG specified, skipping the repo name check")
         return
@@ -113,7 +150,7 @@ def validate_git():  # Called as part of validate_yaml
     if not os.path.exists(os.path.join(service_dir, ".git")):
         _LOG.warning("I don't think I am in git -- skipping the github name check")
         return
-    remotes_p = subprocess.run("git -C {} remote -v show -n|grep push|grep -oE '\S+github.com\S+'|grep '{}'".format(
+    remotes_p = subprocess.run("git -P -C {} remote -v show -n|grep push|grep -oE '\S+github.com\S+'|grep '{}'".format(
             shlex.quote(service_dir), GITHUB_ORG),
             shell=True, stdout=subprocess.PIPE, cwd=service_dir, universal_newlines=True)
     if remotes_p.returncode != 0 or not remotes_p.stdout:
@@ -273,30 +310,85 @@ def validate_yaml():
             sys.exit(4)
 
 
+def docker_label_arg():
+    # TODO: hash of the public files?
+    ret = ""
+    ret += " --label built-local="+shlex.quote(time.strftime('%a, %d %b %Y %H:%M:%S %Z'))
+    ret += " --label built-utc="+shlex.quote(time.strftime('%Y-%m-%d %H:%M:%S %Z',time.gmtime()))
+    ret += " --label built-unixtime="+shlex.quote(str(time.time()))
+    ret += " --label built-on-hostname="+shlex.quote(socket.gethostname())
+    ret += " --label git-desc="+shlex.quote(git_desc)
+    return ret
+
+
+def get_docker_img_git_desc(tag):
+    p = subprocess.run(['docker','inspect','--format','{{ index .Config.Labels "git-desc"}}',tag],
+            universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    if p.returncode != 0 or not p.stdout:
+        return None  # Missing image or label
+    return p.stdout.strip()
+
+def image_matches_git(tag, unclean_ok=False):
+    assert git_desc != 'didnt_ask_git'
+    img_git_desc = get_docker_img_git_desc(tag)
+    if img_git_desc is None: return None  # Never built or missing label
+    return (git_desc == img_git_desc) and (git_clean or unclean_ok)
+
+def warn_on_old_image(tag):
+    ok = image_matches_git(tag)
+    if ok:
+        _LOG.debug("Local docker image %s is up-to-date with the current git commit (%s), good.", tag, git_desc)
+        return
+    if ok is None:
+        _LOG.debug("I'm not sure if docker image %s is up-to-date or not, never built?", tag)
+        return
+    loc = git_desc
+    im = get_docker_img_git_desc(tag)
+    if loc and loc.endswith('dirty'): loc = loc[:-5]
+    if im and im.endswith('dirty'): im = im[:-5]
+    if git_clean or (loc != im):  # Certain
+        _LOG.critical("The %s image you have is outdated! (local git %s != img %s)",
+                tag, git_desc, get_docker_img_git_desc(tag))
+        return
+    _LOG.warning("Careful, the %s image you have may be outdated", tag)  # Unsure (dirty git)
+
+def warn_on_old_images():
+    warn_on_old_image(image_tag)
+    warn_on_old_image(interaction_image_tag)
 
 
 
 def build_service():
     if os.path.exists(os.path.join(service_dir, "service", "Dockerfile")):
+        if in_github_ci():
+            print('::group::Docker-build the service container', flush=True)
         _LOG.info("Building service image...")
         build_args = ""
         if service_conf.get('copy_flag_using_build_arg'):
             build_args = "--build-arg THE_FLAG='%s'" % service_conf["flag"]
-        assert dsystem("docker build %s -t %s %s/service" % (build_args, image_tag, service_dir)) == 0, "service docker image build failed"
+        assert dsystem("docker build %s %s -t %s %s/service" % (build_args, docker_label_arg(), image_tag, service_dir)) == 0, "service docker image build failed"
+        if in_github_ci():
+            print('::endgroup::', flush=True)
+        assert image_matches_git(image_tag, unclean_ok=True)
     else:
         _LOG.warning("no dockerfile found for service...")
 
 def build_interactions():
     if os.path.exists(os.path.join(service_dir, "interaction", "Dockerfile")):
+        if in_github_ci():
+            print('::group::Docker-build the interaction container', flush=True)
         _LOG.info("Building interaction image...")
-        assert dsystem("docker build -t %s %s/interaction" % (interaction_image_tag, service_dir)) == 0, "interaction docker image build failed"
+        assert dsystem("docker build %s -t %s %s/interaction" % (docker_label_arg(), interaction_image_tag, service_dir)) == 0, "interaction docker image build failed"
+        if in_github_ci():
+            print('::endgroup::', flush=True)
+        assert image_matches_git(interaction_image_tag, unclean_ok=True)
 
 def _start_container():
     _stop_container()
     limits = " -m " + str(service_conf.get('limit_memory', '512m'))
     limits += " --memory-reservation " + str(service_conf.get('request_memory', '512m'))
     # Note: in finals we add -i to keep stdin open, perhaps we could do it here too (for the interaction container)
-    assert dsystem("docker run %s --name %s --rm -d %s" % (limits, container_tag, image_tag)) == 0, "service container failed to start"
+    assert dsystem("docker run %s --name %s --rm -d --oom-score-adj=500 %s" % (limits, container_tag, image_tag)) == 0, "service container failed to start"
 def _stop_container():
     dsystem("docker kill %s 2>/dev/null >/dev/null | true" % container_tag)
     dsystem("docker rm %s 2>/dev/null >/dev/null | true" % container_tag)
@@ -315,7 +407,10 @@ def test_service(ip_address, port, exploit=True, host_net=False):
     _LOG.info("Testing container...")
 
     _LOG.info("launching interaction container")
-    interaction_container = subprocess.check_output("docker run %s --rm -i -d %s" % ("--net=host" if host_net else "", interaction_image_tag), shell=True).strip().decode('utf-8')
+    dsystem("docker kill %s 2>/dev/null >/dev/null | true" % interaction_container_tag)
+    dsystem("docker rm %s 2>/dev/null >/dev/null | true" % interaction_container_tag)
+    interaction_container = subprocess.check_output("docker run %s --name %s --rm --oom-score-adj=600 -i -d %s" %
+            ("--net=host" if host_net else "", interaction_container_tag, interaction_image_tag), shell=True).strip().decode('utf-8')
 
     def _run_interaction(script):
         if os.path.basename(script).startswith("exploit") and not exploit:
@@ -330,7 +425,7 @@ def test_service(ip_address, port, exploit=True, host_net=False):
         except subprocess.CalledProcessError as e:
             _LOG.critical("ERROR: %s returned %d -- full cmd: %s output: %s", script, e.returncode, e.cmd, e.output)
             if os.path.basename(script).startswith("exploit"):
-                if service_conf['flag'].encode('utf-8') in output:
+                if service_conf['flag'].encode('utf-8') in e.output:
                     _LOG.critical("Despite the error, the exploit did actually print the flag, so... kinda worked?")
             sys.exit(e.returncode)
 
@@ -387,13 +482,22 @@ def test_service(ip_address, port, exploit=True, host_net=False):
 
 def build_bundle():
     # Do we ever actually use this tgz?
-    public_bundle_path = os.path.join(service_dir, "public_bundle.tar.gz")
+    #
+    # Tries to make an anonymous and reproducible tar file, also for
+    # repositories that include public_bundle.tar.gz in git
+    # If we don't do this, running the tester will always make git dirty, with
+    # annoying consequences on the docker image labels and other scripts.
+    #
+    public_bundle_path = os.path.join(service_dir, "public_bundle.tar")
     try:
         os.remove(public_bundle_path)
     except FileNotFoundError:
         pass
-    with tarfile.open(public_bundle_path, "w:gz") as tar:
+    with tarfile.open(public_bundle_path, "w", format=tarfile.PAX_FORMAT) as tar:
         list_public_files(tar=tar)
+    subprocess.check_output(["tar", "tvf", public_bundle_path])
+    subprocess.check_call(['gzip','-f','-n',public_bundle_path])
+    public_bundle_path += ".gz"
     subprocess.check_output(["tar", "tvzf", public_bundle_path])
     _LOG.info("Created public_bundle.tar.gz -- but remember that the scoreboard is updated differently!")
 
@@ -412,7 +516,7 @@ def list_public_files(tar=None):
     ret = {}  #  basename -> sha256
     for f in service_conf['public_files']:
         bname = os.path.basename(f)  # chalmanager will only use the basename
-        _LOG.warning("Public file: %s <-- %s", bname, f)
+        _LOG.warning("Public file: %s <-- %s", bname, f, extra={"no_github_ci":True})
         assert os.path.exists(f), "Public file not found: {} -- remember that all public files must be pre-built and checked into git".format(f)
         assert os.path.isfile(f), "Only regular files for the public: {}".format(f)
         assert not os.path.islink(f), "No symlinks for the public: {}".format(f)
@@ -425,7 +529,7 @@ def list_public_files(tar=None):
                 return t
             tar.add(f, arcname=bname, filter=anonymize)
 
-    _LOG.warning("^^^^ PLEASE VERIFY THAT THE PUBLIC FILES ARE CORRECT ^^^^")
+    _LOG.warning("^^^^ PLEASE VERIFY THAT THE PUBLIC FILES ARE CORRECT ^^^^", extra={"no_github_ci":True})
     return ret
 
 
@@ -488,12 +592,15 @@ if __name__ == '__main__':
     parser.add_argument("--no-self-update", action="store_true", help="No self-update remote check")
     parser.add_argument("--log-level", metavar='LVL', help="WARNING will also sink docker output. Default: DEBUG")
     parser.add_argument("--use-cwd", action="store_true", help="Use CWD instead of script location for service directory")
-    parser.add_argument("--force-color", action="store_true", help="Force color even if not on a TTY (mainly for github")
+    parser.add_argument("--force-color", action="store_true", help="Force color even if not on a TTY")
     parser.add_argument("cmds", metavar='CMD...', nargs=argparse.REMAINDER, help="Usual tester stuff: nothing / bundle, build, test, launch, test_deployed, deploy, ...")
 
     args = parser.parse_args()
     if args.force_color:
-        coloredlogs.install(logger=_LOG, level=_LOG.level, isatty=True)
+        if globals().get("coloredlogs"):
+            coloredlogs.install(logger=_LOG, level=_LOG.level, isatty=True)
+        else:
+            _LOG.warning("Specified --force-color, but coloredlogs is not installed")
     if args.log_level:
         _LOG.setLevel(args.log_level)
     if _LOG.getEffectiveLevel() >= logging.WARNING:
@@ -514,6 +621,7 @@ if __name__ == '__main__':
     image_tag = NAME_PREFIX + ":" + service_name     # also see deploy -- registry names are different
     interaction_image_tag = image_tag + '-interaction'
     container_tag = "running-%s" % service_name
+    interaction_container_tag = "running-interaction-%s" % service_name
 
     validate_yaml()
 
@@ -521,26 +629,56 @@ if __name__ == '__main__':
     sys.argv = [sys.argv[0]] + args.cmds
     arg = sys.argv[1] if len(sys.argv) >= 2 else ""
     if arg == 'bundle':
+        warn_on_old_images()
         build_bundle()
     elif arg == 'list_public_files':
+        warn_on_old_images()
         list_public_files()
     elif arg == 'build':
         build_service()
         build_interactions()
         list_public_files()
     elif arg == 'test':
+        # ./tester test           [noexploit] [[no-]rebuild]
+        # ./tester test ip [port] [noexploit] [[no-]rebuild]
+        warn_on_old_images()
+        rebuild_first = None
+        if image_matches_git(image_tag) and image_matches_git(interaction_image_tag):
+            rebuild_first = False
+        elif in_github_ci() or ('CI' in os.environ) or not (sys.stdin.isatty() and sys.stdout.isatty() and sys.stderr.isatty()):
+            _LOG.info("Not interactive, I won't ask to rebuild first (you can also pass no-rebuild)")
+            rebuild_first = False
+        if len(sys.argv) >= 2 and sys.argv[-1] == "rebuild":
+            del sys.argv[-1]
+            rebuild_first = True
+        elif len(sys.argv) >= 2 and sys.argv[-1] == "no-rebuild":
+            del sys.argv[-1]
+            rebuild_first = False
+        if rebuild_first is None and input("Do you want to rebuild first (cmdline argument: [no-]rebuild)? ") in ['y','Y','yes','YES','Yes']:
+            rebuild_first = True
+        if rebuild_first:
+            build_service()
+            build_interactions()
+
+        test_exploits = True
+        if len(sys.argv) >= 2 and sys.argv[-1] == "noexploit":
+            del sys.argv[-1]
+            test_exploits = False
+
         if len(sys.argv) == 2:
+            _LOG.debug("I'm going to test against a local container (%s exploits)", "with" if test_exploits else "no")
             _ip_address, _port = launch_service()
-            test_service(_ip_address, _port)
+            test_service(_ip_address, _port, exploit=test_exploits)
         else:
             port = sys.argv[3] if len(sys.argv)>=4 else grep_for_exposed_port()
-            test_exploits = not((len(sys.argv)>=5) and (sys.argv[4] == 'noexploit'))
+            _LOG.debug("I'm going to test a remote instance at %s %s (%s exploits)", sys.argv[2], port, "with" if test_exploits else "no")
             test_service(sys.argv[2], int(port), exploit=test_exploits)
     elif arg == 'test_deployed':
         # ./tester test_deployed [[no]exploit [host [port [host_net]]]]
         #                                      ^ special host names: lb, public
         #                                            ^ special port: pow (guessed_port+1)
-        build_interactions()
+        if not image_matches_git(interaction_image_tag):
+            build_interactions()
         test_exploits = None
         if len(sys.argv) >= 3:
             assert sys.argv[2] in ('exploit','noexploit')
@@ -575,19 +713,28 @@ if __name__ == '__main__':
         finally:
             _stop_container()
     elif arg == 'deploy':
-        rebuild_first = False
-
-        if ('CI' in os.environ) or not (sys.stdin.isatty() and sys.stdout.isatty() and sys.stderr.isatty()):
+        warn_on_old_image(image_tag)
+        rebuild_first = None
+        if in_github_ci() or ('CI' in os.environ) or not (sys.stdin.isatty() and sys.stdout.isatty() and sys.stderr.isatty()):
             _LOG.info("Not interactive, I won't ask to build first")
-        elif len(sys.argv) >= 3 and sys.argv[2] == "rebuild":
+            rebuild_first = False
+        if len(sys.argv) >= 3 and sys.argv[2] == "rebuild":
+            del sys.argv[2]
             rebuild_first = True
         elif len(sys.argv) >= 3 and sys.argv[2] == "no-rebuild":
-            pass
-        elif input("Do you want to rebuild first? ") in ['y','Y','yes','YES','Yes']:
+            del sys.argv[2]
+            rebuild_first = False
+        elif image_matches_git(image_tag):
+            rebuild_first = False
+        if rebuild_first is None and input("Do you want to rebuild first? ") in ['y','Y','yes','YES','Yes']:
             rebuild_first = True
 
         if rebuild_first:
             build_service()
+
+        if not git_clean:
+            _LOG.critical("You're deploying from a dirty git tree, it will be harder to check what images are deployed (label=%s)", git_desc)
+
 
         assert REGISTRY, "Missing REGISTRY setting"
         tagcmd = "docker tag %s:%s %s/%s-%s:latest" % (NAME_PREFIX, service_name.lower(), REGISTRY, NAME_PREFIX, service_name.lower())
@@ -595,14 +742,25 @@ if __name__ == '__main__':
         assert dsystem(tagcmd) == 0
         pushcmd = "docker push %s/%s-%s:latest" % (REGISTRY, NAME_PREFIX, service_name.lower())
         print(pushcmd)
-        assert dsystem(pushcmd) == 0
+        if dsystem(pushcmd) != 0:
+            exst = os.path.exists("/etc/docker/daemon.json")
+            insec = False
+            if exst:
+                with open("/etc/docker/daemon.json") as df:
+                    dconf = json.load(df)
+                insec = REGISTRY in dconf.get('insecure-registries')
+            if not (exst and insec):
+                _LOG.critical("Couldn't docker push. You need to set this in /etc/docker/daemon.json  --> %s", json.dumps({'insecure-registries': [REGISTRY]})) 
+            else:
+                _LOG.critical("^^^^^^ Couldn't push to the docker registry, See errors above ^^^^^^^^")
+            sys.exit(4)
         print()
 
         list_public_files()
 
         if K8S_MASTER:
             _LOG.warning("Killing pods...")
-            sshcmd = ['ssh','-t',K8S_MASTER,"kubectl delete pod --all -n " + service_conf['service_name'].lower()]
+            sshcmd = ['ssh', K8S_MASTER, "--", "sudo", "-i", "sh", "-c", "'kubectl delete pod --all -n " + service_conf['service_name'].lower() + "'"]
             _LOG.warning("Running %s", ' '.join(shlex.quote(x) for x in sshcmd))
             subprocess.check_call(sshcmd)
         else:
@@ -610,6 +768,7 @@ if __name__ == '__main__':
 
         _LOG.warning("IF YOUR SERVICE IS ALREADY ON THE SCOREBOARD: yell to update the public files there")
         _LOG.info("If it's a new service: ask it to be added to Kubernetes")
+        _LOG.info("Look at what images are deployed in k8s, the docker image should be labeled git-desc=%s", git_desc)
     else:
         assert len(sys.argv) == 1, "Unknown command '{}', try --help".format(sys.argv[1])
         try:
@@ -617,6 +776,6 @@ if __name__ == '__main__':
             build_interactions()
             _ip_address, _port = launch_service()
             test_service(_ip_address, _port)
-            build_bundle()
+            if not os.getenv('DONT_AUTOBUILD_PUBLIC_BUNDLE'): build_bundle()
         finally:
             _stop_container()
