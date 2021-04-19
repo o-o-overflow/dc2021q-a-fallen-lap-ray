@@ -1,4 +1,23 @@
-#!/bin/sh
+#!/bin/bash
 
 exec 2>/dev/null
-timeout -k1 240 stdbuf -i0 -o0 -e0 /service
+
+# create a temp directory for this connection
+TEMP_DIR=$(mktemp -d)
+chmod o+w "$TEMP_DIR"
+chmod o+x "$TEMP_DIR"
+
+echo $TEMP_DIR
+
+cleanup() {
+    rm -rf "$TEMP_DIR"
+    exit 0
+}
+
+trap cleanup EXIT ERR INT TERM
+
+# Copy the files to the new temp directory
+cp -p /service/* "$TEMP_DIR"
+
+cd "$TEMP_DIR"
+/schitzo 300 "$TEMP_DIR/manchester" -f ./os -t 240

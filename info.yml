@@ -1,16 +1,15 @@
 # Base service info for the scoreboard ########################################
-service_name: "template"
-description: "This is a template service."
+service_name: "a-fallen-lap-ray"
+description: "TODO."
 tags:
   - pwn
-  - reversing
 authors:
-  - author1
-  - author2
+  - adamd
+  - zardus
 
 # Flag info
 violates_flag_format: false         # if this is not "true", the flag is verfied against the flag format
-flag: "OOO{this is a test flag}"    # change it!
+flag: "OOO{orpheus_cafeteria_multipollutant_and_the_past}"    # change it!
 copy_flag_using_build_arg: True     # Optionally: pass in THE_FLAG=(the flag above) using --build-arg (allows variable flags if desired for testing)
 
 # How players will connect to your service.
@@ -34,8 +33,7 @@ type: jeopardy
 # The paths are relative to the repository
 # They are published manually. IF YOU CHANGE THEM DURING THE GAME YELL!
 public_files:
-  - service/service
-  - service/src/config.py
+  - service/a-fallen-lap-ray.tar.gz
 
 
 # Test scripts are heavily encouraged.
@@ -44,11 +42,8 @@ public_files:
 # Exploit scripts must output the flag using "FLAG: <FLAG>" and exit with 0 if the flag was captured correctly. 
 # The paths are absolute in the `interaction` docker container.
 interactions:
-  - /exploit1.py
-  - /exploit2.sh
-  - /check1.py
-  - /check2.sh
-
+  - /exploit.py
+  - /check.py
 
 # It's strongly suggested to have a healthcheck regex
 # The infrastructure will periodically connect and alert if it doesn't match anymore
@@ -57,7 +52,7 @@ interactions:
 # Example: healthcheck_tcp: awesome chall
 #          healthcheck_tcp_send: some intial command
 # Example: healthcheck_http: Author Login
-healthcheck_tcp: awesome chall
+healthcheck_tcp: Booting up IndustrialAutomaton
 
 
 
@@ -66,7 +61,7 @@ healthcheck_tcp: awesome chall
 
 # This is the number of concurrent connections that a container should be able to handle.
 # Also see xinetd's instances parameter
-concurrent_connections: 64
+concurrent_connections: 16
 
 # Resource limits that will go in k8s
 # request_xxx is used for scheduling (overcommitting)

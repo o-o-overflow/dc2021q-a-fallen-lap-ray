@@ -1,16 +1,24 @@
 from ubuntu:20.04
 
 # example:
-run apt-get -qq update && apt-get install -qq --no-install-recommends xinetd
+run apt-get -qq update && apt-get install -qq --no-install-recommends xinetd sudo
 # python3-pip, etc.
 
-# Note: anything that goes in public_files must be pre-built and checked in git
-copy src/config.py /
-copy service /service
+copy schitzo /
+
+RUN mkdir /service
+copy sh /service
+copy os /service
+copy quit /service
+copy vm /service
+copy p /service
+copy manchester /service
+
+RUN chmod 644 /service/sh /service/os /service/vm /service/p && chmod 666 /service/quit && chmod 755 /service/manchester
 
 # If desired, the deployment tester can pass in the flag from the yaml
 ARG THE_FLAG="OOO{this is a test flag}"
-RUN touch /flag && chmod 644 /flag && echo $THE_FLAG > /flag
+RUN touch /service/flag && chmod 644 /service/flag && echo $THE_FLAG > /service/flag
 
 copy service.conf /service.conf
 copy banner_fail /banner_fail
