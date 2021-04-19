@@ -7,8 +7,6 @@ TEMP_DIR=$(mktemp -d)
 chmod o+w "$TEMP_DIR"
 chmod o+x "$TEMP_DIR"
 
-echo $TEMP_DIR
-
 cleanup() {
     rm -rf "$TEMP_DIR"
     exit 0
