@@ -2,14 +2,29 @@ x = ADD 10 20
 y = SUB 40 10
 z = LT x y
 OUTD z
-a = ADD 100 50
+
+z_reset = XOR z z
+a_input = ADD z_reset 100
+a = ADD a_input 50
 b = ADD a 500
 OUTD b
-c = ADD a 1242
+
+b_reset = XOR b b
+b_new = ADD b_reset a
+c = ADD b_new 1242
 OUTD c
-d = NEG z
+
+c_output = XOR c c
+c_new = ADD c_output z
+d = NEG c_new
 OUTD d
-e = ADD a 10000
-f = ADD a 20000
+
+d_output = XOR d d
+d_new = ADD d_output a
+e = ADD d_new 10000
 OUTD e
+
+e_output = XOR e e
+e_new = ADD e_output a
+f = ADD e_new 20000
 OUTD f

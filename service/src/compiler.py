@@ -3,6 +3,7 @@ import argparse
 import collections
 import dataclasses
 import itertools
+import json
 import logging
 import os
 import random
@@ -10,12 +11,14 @@ import sys
 import tempfile
 import typing
 
+
 import lark
 
 import assembler
 
 l = logging.getLogger("compiler")
 
+PARSER = None
 GRAMMAR_FILE = os.path.dirname(os.path.realpath(__file__)) + '/grammar.lark'
 
 OP_TO_ASM = {
@@ -342,7 +345,6 @@ class GenerateAssemblyPass(lark.visitors.Interpreter):
             self.variables[var] = again_name
 
         self.visit(tree.children[1])
-
         # connect the variables that are at the end of the loop body
         # to the start of the loop
         for var in used_variables:
@@ -455,16 +457,30 @@ class GenerateAssemblyPass(lark.visitors.Interpreter):
 
     def outs_literal(self, tree):
         string = eval(str(tree.children[0]))
+
+        # Set a temp variable
+        new_variable_name = f"ensure_outs_{self._new_temp_variable()}"
+
+        set_new_var_program = PARSER.parse(f"{new_variable_name} = 1;")
+        set_new_var = set_new_var_program.children[0].children[0]
+        self.visit(set_new_var)
         for i in range(0, len(string), 8):
             current = string[i:i+8]
-            to_parse = repr(current)
+            new_var_name = f"ensure_outs_var_{self._new_temp_variable()}"
+            branch_statement = f"""if ({new_variable_name} == 1)
+              {{ 
+                {new_var_name} = {json.dumps(current)} + ({new_variable_name} ^ {new_variable_name});
+                OUTS({new_var_name});
+                {new_variable_name} = {new_variable_name} + ({new_var_name} ^ {new_var_name});
+              }}
+            """
 
-            function_name = lark.Tree('function_name', [lark.Token('CNAME', 'OUTS')])
-            args = lark.Tree('expression_function_arg_list', [lark.Tree('string', [lark.Token('STRING', to_parse)])])
+            branch_statement_program = PARSER.parse(branch_statement)
+            condition = branch_statement_program.children[0].children[0]
 
-            function_call = lark.Tree('function_call', [function_name, args])
+            self.visit(condition)
 
-            self.visit(function_call)
+        return self.variables[new_variable_name]
 
     def function_call(self, tree):
         function_name = str(tree.children[0].children[0])
@@ -682,11 +698,12 @@ class GenerateAssemblyPass(lark.visitors.Interpreter):
 def main(input_file, output_file, assembly_output, graph_output, backdoor):
 
     with open(GRAMMAR_FILE, 'r') as grammar:
-        parser = lark.Lark(grammar, start='program')
+        global PARSER
+        PARSER = lark.Lark(grammar, start='program')
     
     with open(input_file, 'r') as input:
         original_file_input = input.read()
-        tree = parser.parse(original_file_input)
+        tree = PARSER.parse(original_file_input)
 
     l.debug(f"parsed tree: {tree.pretty()}")
 

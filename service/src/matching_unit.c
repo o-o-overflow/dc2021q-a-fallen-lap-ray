@@ -34,6 +34,12 @@ ready_token_pair_type ready_token_pair_from_tokens(token_type token_1, token_typ
    #ifdef DEBUG
    assert(token_1.tag == token_2.tag);
    assert(DESTINATION_TO_ADDRESS(token_1.destination) == DESTINATION_TO_ADDRESS(token_2.destination));
+   if (DESTINATION_TO_INPUT(token_1.destination) == DESTINATION_TO_INPUT(token_2.destination))
+   {
+      printf("Shit it happened\n");
+      print_token(token_1);
+      print_token(token_2);
+   }
    assert(DESTINATION_TO_INPUT(token_1.destination) != DESTINATION_TO_INPUT(token_2.destination));
    #endif
 

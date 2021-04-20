@@ -1,17 +1,29 @@
 defun foo(a, b) {
-  OUTD(a);
-  OUTD(b);
-  return a + b + 1;
+   test = 0;
+   if (test == 0)
+   {
+      OUTD(a);
+      test = 1;
+   }
+   if (test == 1)
+   {
+      OUTD(b);
+   }
+   return a + b + 1 + (test^test);
 }
 
 y = foo(10, 100);
 OUTD(y);
 
-z = foo(20, y);
+y_zero = y ^ y;
+twenty = y_zero + 20;
+
+z = foo(twenty, y);
 OUTD(z);
 
 defun id(x) {
   return x;
 }
 
-OUTD(id(1000));
+z = (z ^ z) + 1000;
+OUTD(id(z));

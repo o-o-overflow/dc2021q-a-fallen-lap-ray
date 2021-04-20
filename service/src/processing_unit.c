@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <sys/random.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -36,6 +37,11 @@ void run_processing_unit(queue* incoming_execution_packets, queue* outgoing_toke
    #ifdef DEBUG
    pid_t pid = getpid();
    #endif
+
+   // Init the random seed
+   unsigned int seed;
+   getrandom(&seed, sizeof(int), 0);
+   srandom(seed);
 
    while(1)
    {
@@ -306,6 +312,9 @@ execution_result function_unit(execution_packet packet)
       case SDF:
       case ULK:
       case LSK:
+      case NAR:
+      case ARF:
+      case AST:
 		 #ifdef DEBUG
 		 assert(false);
 		 #endif

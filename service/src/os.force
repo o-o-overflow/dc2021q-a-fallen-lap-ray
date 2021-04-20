@@ -407,24 +407,31 @@ export getentropy;
 
 # Boot sequence
 # Change the following for phase 2
-OUTS_LITERAL("Booting up IndustrialAutomaton OS v. 0.0.2\n");
-OUTS_LITERAL("Loading memory\n");
-OUTS_LITERAL("Loading instructions\n");
-OUTS_LITERAL("Loading drivers\n");
-OUTS_LITERAL("Configuring peripherals\n");
-OUTS_LITERAL(".\n");
-OUTS_LITERAL(".\n");
-OUTS_LITERAL(".\n");
-OUTS_LITERAL(".\n");
-OUTS_LITERAL(".\n");
-OUTS_LITERAL(".\n");
-OUTS_LITERAL(".\n");
-OUTS_LITERAL(".\n");
-OUTS_LITERAL(".\n");
-OUTS_LITERAL(".\n");
-OUTS_LITERAL("Boot process complete\n");
-
-OUTS_LITERAL("Running tests\n");
+result = OUTS_LITERAL("Booting up IndustrialAutomaton OS v. 0.0.2\n");
+if (result == result)
+{
+   result = OUTS_LITERAL("Loading memory\n");
+}
+if (result == result)
+{
+   result = OUTS_LITERAL("Loading instructions\n");
+}
+if (result == result)
+{
+   result = OUTS_LITERAL("Loading drivers\n");
+}
+if (result == result)
+{
+   result = OUTS_LITERAL("Configuring peripherals\n");
+}
+if (result == result)
+{
+   result = OUTS_LITERAL("Boot process complete\n");
+}
+if (result == result)
+{
+   result = OUTS_LITERAL("Running tests\n");
+}
 # Test strlen
 # OUTD(strlen("adamada"));
 # OUTD(strlen(""));
@@ -468,8 +475,7 @@ OUTS_LITERAL("Running tests\n");
 
 # result = result_1 & result_2;
 
-result = 0 ^ 0;
-if (result != 1920412942)
+if (result == result)
 {
   OUTS_LITERAL("Tests complete\n");
   done = result ^ result;

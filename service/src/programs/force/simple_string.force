@@ -8,6 +8,9 @@ z = x | y;
 
 if (z != 0)
 {
-  OUTS_LITERAL("This will be a shortcut to help enable output of long string literals.\n");
-  OUTS_LITERAL("This syntax will only be available for constant strings in an OUTS function, which is eh\n");
+   result = OUTS_LITERAL("This will be a shortcut to help enable output of long string literals.\n");
+   if (result == result)
+   {
+      OUTS_LITERAL("This syntax will only be available for constant strings in an OUTS function, which is eh\n");
+   }
 }

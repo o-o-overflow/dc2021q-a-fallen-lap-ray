@@ -117,8 +117,14 @@ void start_machine(char* os_filename, int timeout)
       run_array_module(processed_executable_packet_queue, post_array_packet_queue);
    }
 
-   pid_t processing_unit = fork();
-   if (processing_unit == 0)
+   pid_t processing_unit_1 = fork();
+   if (processing_unit_1 == 0)
+   {
+	  run_processing_unit(post_array_packet_queue, execution_token_output_queue);
+   }
+
+   pid_t processing_unit_2 = fork();
+   if (processing_unit_2 == 0)
    {
 	  run_processing_unit(post_array_packet_queue, execution_token_output_queue);
    }
@@ -145,7 +151,8 @@ void start_machine(char* os_filename, int timeout)
    // wait for any of the children to die.
    wait(NULL);
 
-   kill(processing_unit, 9);
+   kill(processing_unit_1, 9);
+   kill(processing_unit_2, 9);
    kill(instruction_store, 9);
    kill(matching_unit, 9);
    kill(io_switch, 9);

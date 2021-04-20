@@ -1,14 +1,21 @@
 zero = MUL 10 0
 OUTD zero
 
-another_zero = MUL 0 10
+another_zero = MUL zero 10
 OUTD another_zero
 
-fifty = MUL 10 5
+reset = XOR another_zero another_zero
+ten = ADD reset 10
+fifty = MUL ten 5
 OUTD fifty
 
-test_1 = GT 20 10
-test_0 = GT 10 20
+twenty = ADD ten 10
+test_1 = GT twenty 10
+
+test_1_reset = XOR test_1 test_1
+
+another_twenty = ADD test_1_reset 20
+test_0 = GT ten another_twenty
 
 OUTD test_1
 OUTD test_0

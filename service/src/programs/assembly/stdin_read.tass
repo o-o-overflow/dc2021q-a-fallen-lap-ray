@@ -1,11 +1,18 @@
 input_byte = RED 0
-second_byte = RED 0
-third_byte = RED 0
-fourth_byte = RED 0
-fifth_byte = RED 0
-
 OUTD input_byte
+
+input_byte_reset = XOR input_byte input_byte
+second_byte = RED input_byte_reset
 OUTD second_byte
+
+second_byte_reset = XOR second_byte second_byte
+third_byte = RED second_byte_reset
 OUTD third_byte
+
+third_byte_reset = XOR third_byte third_byte
+fourth_byte = RED third_byte_reset
 OUTD fourth_byte
+
+fourth_byte_reset = XOR fourth_byte fourth_byte
+fifth_byte = RED fourth_byte_reset
 OUTD fifth_byte
