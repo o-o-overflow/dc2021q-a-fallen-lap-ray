@@ -180,14 +180,12 @@ defun read_memory(memory, address)
 defun write_memory(memory, address, value)
 {
    memory[address] = value;
-   if (memory == memory)
-   {
-      return memory[address];
-   }
+   return value;
 }
 
 defun interpret_imm(memory, registers, instruction)
 {
+   result = 0;
    if (TRACE)
    {
       OUTS_LITERAL("imm\n");
@@ -196,11 +194,14 @@ defun interpret_imm(memory, registers, instruction)
    arg2 = (instruction & INST_ARG2_MASK) >> INST_ARG2_SHIFT;
 
    result = write_register(registers, arg1, arg2);
+
    return result ^ result;
 }
 
 defun interpret_add(memory, registers, instruction)
 {
+   result = 0;
+
    if (TRACE)
    {
       OUTS_LITERAL("add\n");
@@ -220,12 +221,14 @@ defun interpret_add(memory, registers, instruction)
    }
 
    result = write_register(registers, arg1, new_value);
-
    return result ^ result;
 }
 
+
 defun interpret_stk(memory, registers, instruction)
 {
+   result = 0;
+
    if (TRACE)
    {
       OUTS_LITERAL("stk\n");
@@ -233,43 +236,61 @@ defun interpret_stk(memory, registers, instruction)
    arg1 = (instruction & INST_ARG1_MASK) >> INST_ARG1_SHIFT;
    arg2 = (instruction & INST_ARG2_MASK) >> INST_ARG2_SHIFT;
 
-   pop = 0;
+   current_stack_addr = registers[REG_S];
+   stack_value = read_memory(memory, current_stack_addr);
+
+   arg1_value = read_register(registers, arg1);
+   arg2_value = read_register(registers, arg2);
+
+   new_stack_addr_pop = current_stack_addr - STACK_DIRECTION;
+   new_stack_addr_push = current_stack_addr + STACK_DIRECTION;
+
+
+   pop_result = 0;
    if (arg1)
    {
-      // This is a pop
-      if (TRACE)
-      {
-         OUTS_LITERAL("pop\n");
-      }
-      stack_addr = registers[REG_S];
-      stack_value = read_memory(memory, stack_addr);
-      result = write_register(registers, arg1, stack_value);
-      registers[REG_S] = stack_addr - STACK_DIRECTION;
-      pop = result ^ result;
+      pop_result = write_register(registers, arg1, stack_value);
    }
 
-   push = 0;
+   push_result = 0;
    if (arg2)
    {
-      // this is a push
-      if (TRACE)
-      {
-         OUTS_LITERAL("push\n");
-      }
-      arg2_value = read_register(registers, arg2);
-      stack_addr = registers[REG_S] + STACK_DIRECTION;
-
-      result = write_memory(memory, stack_addr, arg2_value);
-      registers[REG_S] = stack_addr;
-      push = result ^ result;
+      push_result = write_memory(memory, new_stack_addr_push, arg2_value);
    }
 
-   return (pop ^ pop) + (push ^ push);
+   pop_registers = registers;
+   push_registers = registers;
+
+   if (arg2)
+   {
+      push_registers[REG_S] = new_stack_addr_push;
+   }
+   if (arg1)
+   {
+      pop_registers[REG_S] = new_stack_addr_pop;
+   }
+      
+      # push = interpret_push(memory, registers, arg1, arg2); */
+      # if (TRACE & push) */
+      # { */
+      #    OUTS("DONEPSH\n"); */
+      # } */
+
+      # pop = interpret_pop(memory, registers, arg1, arg2); */
+      # if (TRACE & pop) */
+      # { */
+      #    OUTS("DONEPOP\n"); */
+      # } */
+
+   result = pop_registers ^ push_registers ^ pop_result ^ push_result;
+
+   return result ^ result;
 }
 
 defun interpret_stm(memory, registers, instruction)
 {
    // memory[reg[arg1]] = reg[arg2]
+   result = 0;
    if (TRACE)
    {
       OUTS_LITERAL("stm\n");
@@ -300,6 +321,7 @@ defun interpret_stm(memory, registers, instruction)
 defun interpret_ldm(memory, registers, instruction)
 {
    // reg[arg1] = memory[reg[arg2]]
+   result = 0;
    if (TRACE)
    {
       OUTS_LITERAL("ldm\n");
@@ -327,11 +349,13 @@ defun interpret_ldm(memory, registers, instruction)
    }
 
    result = write_register(registers, arg1, memory_value);
+
    return result ^ result;
 }
 
 defun interpret_cmp(memory, registers, instruction)
 {
+   result = 0;
    if (TRACE)
    {
       OUTS_LITERAL("cmp\n");
@@ -381,6 +405,7 @@ defun interpret_cmp(memory, registers, instruction)
 
 defun interpret_jmp(memory, registers, instruction)
 {
+   result = 0;
    if (TRACE)
    {
       OUTS_LITERAL("jmp\n");
@@ -403,7 +428,7 @@ defun interpret_jmp(memory, registers, instruction)
       registers[REG_I] = dest;
       if (1)
       {
-         jump = dest ^ dest;
+         result = dest ^ dest;
       }
    }
    else
@@ -412,14 +437,14 @@ defun interpret_jmp(memory, registers, instruction)
       {
          OUTS_LITERAL("!taken\n");
       }
-      jump = -1;
+      result = -1;
    }
-
-   return jump ^ jump;
+   return result ^ result;
 }
 
 defun interpret_sys(memory, registers, instruction)
 {
+   result = 0;
    if (TRACE)
    {
       OUTS_LITERAL("sys\n");
@@ -539,9 +564,8 @@ defun interpret_sys(memory, registers, instruction)
       }
       read_output = write_register(registers, arg2, i);
    }
-   
-
-   return write_output ^ open_output ^ exit_output ^ read_output;
+   result = write_output ^ open_output ^ exit_output ^ read_output;
+   return result ^ result;
 }
 
 
@@ -596,7 +620,7 @@ defun interpret_instruction(memory, registers, instruction)
       sys_output = interpret_sys(memory, registers, instruction);
    }
 
-   return add_output ^ stk_output ^ stm_output ^ ldm_output ^ cmp_output ^ jmp_output ^ sys_output;
+   return imm_output ^ add_output ^ stk_output ^ stm_output ^ ldm_output ^ cmp_output ^ jmp_output ^ sys_output;
 }
 
 defun interpreter_loop(memory, registers)
@@ -604,21 +628,33 @@ defun interpreter_loop(memory, registers)
    i = 0;
    while(registers[REG_I] != MEM_LENGTH)
    {
-      if (TRACE)
-      {
-         OUTS_LITERAL("Inst\n");
-      }
       ip = registers[REG_I];
-      if (TRACE)
-      {
-         OUTD(ip);
-      }
       registers[REG_I] = ip + INSTRUCTION_SIZE;
       instruction = memory[ip % MEM_LENGTH];
+
       if (TRACE)
       {
-         OUTD(instruction & 0xFFFFFFFF);
-         OUTD(registers[REG_S]);
+         t = 0;
+         if (t == t)
+         {
+            s = "Inst\n" + t;
+            OUTS(s);
+         }
+         if (t == t)
+         {
+            OUTD(ip + t);
+            t = t + (ip^ip);
+         }
+         if (t == t)
+         {
+            OUTD(instruction & 0xFFFFFFFF);
+            t = t + (instruction^instruction);
+         }
+         if (t == t)
+         {
+            OUTD(registers[REG_S]);
+            t = t + (registers^registers);
+         }
       }
       result = interpret_instruction(memory, registers, instruction);
       registers = registers + (result ^ result);
