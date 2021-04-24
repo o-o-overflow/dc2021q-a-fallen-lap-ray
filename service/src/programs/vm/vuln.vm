@@ -1,4 +1,19 @@
 main:
+stk 0 b
+stk 0 c
+stk 0 d
+
+imm a main_menu
+jmp 0 a
+stk d 0
+stk c 0
+stk b 0
+stk i 0
+
+main_menu:
+stk 0 b
+stk 0 c
+stk 0 d
 
 imm a welcome
 stk 0 a
@@ -132,6 +147,18 @@ stm s s
 ldm d s
 
 # Make room on the stack
+# imm a 0
+# stk 0 a
+# stk 0 a
+# stk 0 a
+# stk 0 a
+# stk 0 a
+# stk 0 a
+# stk 0 a
+# stk 0 a
+# stk 0 a
+# stk 0 a
+
 imm b negative_log_struct_size
 ldm a b
 add s a
@@ -145,7 +172,7 @@ ldm b b
 
 cmp a b
 imm a _new_log_continue
-jmp != a
+jmp < a
 
 imm a no_space
 stk 0 a
@@ -188,8 +215,9 @@ stk 0 a
 # buf to read into (s+name_offset)
 stk 0 b
 
-# num to read (8 max due to struct)
-imm a 8
+# num to read (name_len max due to struct)
+imm a name_len
+ldm a a
 stk 0 a
 
 imm a _new_log_after_read_until_newline
@@ -269,7 +297,8 @@ stk 0 a
 stk 0 b
 
 # num to read (32 max due to struct)
-imm a 32
+imm a content_len
+ldm a a
 stk 0 a
 
 imm a _new_log_after_read_until_newline_content
@@ -824,10 +853,10 @@ stk i 0
 .include mult.vm
 
 # Log "struct" format
-# eight bytes name
 # name len (8 bytes)
-# 32 bytes content
+# eight bytes name
 # content len (8 bytes)
+# 32 bytes content
 # sizeof(struct log) = 56 bytes
 
 
@@ -841,30 +870,32 @@ menu_input_len len(menu_input)
 menu_goodbye "So long\n"
 menu_goodbye_len len(menu_goodbye)
 log_struct_size 56
-negative_log_struct_size -log_struct_size
-name_offset 0
-name_len_offset 8
-content_offset 16
-content_len_offset 48
+negative_log_struct_size -(log_struct_size)
+content_len 32
+name_offset 8
+name_len_offset 0
+content_offset 24
+content_len_offset 16
 log_name "What is the name of the log?\n"
 log_name_len len(log_name)
 log_content "What is the content of the log?\n"
 log_content_len len(log_content)
-current_num_logs 0
-# Due to input parsing constraints, max_num_logs cannot be more than 9
-max_num_logs 5
-logs "\x00"*(max_num_logs*log_struct_size)
-end_paren ") "
-end_paren_len len(end_paren)
-no_space "No space for more logs\n"
-no_space_len len(no_space)
-list_message "Logs:\n"
-list_message_len len(list_message)
-index_log_message "What is the log number?\n"
-index_log_message_len len(index_log_message)
 negative_ascii_zero -0x30
 negative_one -1
+current_num_logs 0
+no_space "No space for more logs\n"
+no_space_len len(no_space)
+index_log_message "What is the log number?\n"
+index_log_message_len len(index_log_message)
 no_log_message "Cannot find that log\n"
 no_log_message_len len(no_log_message)
 view_separator ": "
 view_separator_len len(view_separator)
+# Due to input parsing constraints, max_num_logs cannot be more than 9
+logs "\x00"*((5*log_struct_size)-1)
+max_num_logs 5
+end_paren ") "
+end_paren_len len(end_paren)
+list_message "Logs:\n"
+list_message_len len(list_message)
+name_len 8

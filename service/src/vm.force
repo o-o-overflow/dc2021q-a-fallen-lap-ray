@@ -468,6 +468,14 @@ defun interpret_sys(memory, registers, instruction)
       flags = registers[REG_B];
 
       open_output = open_file(fname, flags);
+
+      if (TRACE)
+      {
+         OUTS(fname);
+         OUTD(flags);
+         OUTD(open_output);
+      }
+
       open_output = write_register(registers, arg2, open_output);
    }
 
@@ -561,6 +569,10 @@ defun interpret_sys(memory, registers, instruction)
          {
             done = 1;
          }
+      }
+      if (TRACE)
+      {
+         OUTD(i);
       }
       read_output = write_register(registers, arg2, i);
    }
@@ -705,7 +717,7 @@ defun main(arg)
    memory = NEW_ARRAY(MEM_LENGTH);
    registers = NEW_ARRAY(REGISTER_LENGTH);
    registers[REG_I] = 0;
-   registers[REG_S] = MEM_LENGTH;
+   registers[REG_S] = MEM_LENGTH-128;
 
    memory = load_code(filename, memory);
 

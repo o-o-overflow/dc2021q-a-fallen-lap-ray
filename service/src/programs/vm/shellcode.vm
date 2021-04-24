@@ -1,0 +1,63 @@
+main:
+stk 0 a
+
+imm a 0
+add a s
+
+imm b 0x6c66
+stm a b
+
+imm c 2
+add a c
+
+imm b 0x6761
+stm a b
+
+# Address of fname goes into a
+imm a 0
+add a s
+
+# flags in reg
+imm b 0x0
+
+sys open a
+
+# fd is now in a
+
+# get extra space on the stack
+
+# Create 72 bytes on the stack
+# stk 0 a
+# stk 0 a
+# stk 0 a
+# stk 0 a
+# stk 0 a
+# stk 0 a
+# stk 0 a
+
+# read and write from the fd
+
+# buf in b
+imm b 0
+add b s
+
+# len in c
+imm c 0xff
+
+# fd in a
+
+sys read c
+
+# c should now have the number of bytes
+
+# buf should still be in b
+
+# len in c
+
+# fd is 1 (stdout)
+imm a 1
+
+sys write d
+
+sys exit d
+
