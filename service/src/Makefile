@@ -4,7 +4,7 @@ SRC    = $(filter-out schitzo.c,$(wildcard *.c))
 OBJ    = $(SRC:%.c=%.o)
 
 PLATFORM = $(shell uname)
-LIBS   = -pthread
+LIBS   = -pthread -lseccomp
 
 BUILDDIR = build
 
@@ -23,7 +23,7 @@ EXE    = $(BUILDDIR)/manchester
 # Compiler, Linker Defines
 CC      = gcc
 CFLAGS  = -std=gnu11 -Wall -O2
-LIBPATH = -L.
+LIBPATH = -L. 
 LDFLAGS = -o $(EXE) $(LIBPATH) $(LIBS)
 CFDEBUG = -std=gnu11 -Wall -g -DDEBUG $(LDFLAGS)
 RM      = /bin/rm -f

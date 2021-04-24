@@ -1,9 +1,43 @@
 #include <stdio.h>
 
+#include <linux/audit.h>
+#include <linux/filter.h>
+#include <linux/seccomp.h>
+
+#include <seccomp.h> /* libseccomp */
+
+
 #include "io_switch.h"
 
 void run_io_switch(queue* execution_token_output_queue, queue* matching_unit_input_queue)
 {
+   // set up seccomp
+   scmp_filter_ctx ctx;
+   int rc = 0;
+
+   ctx = seccomp_init(SCMP_ACT_KILL); // default action: kill
+   rc += seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(rt_sigreturn), 0);
+   rc += seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(exit), 0);
+   rc += seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(futex), 0);
+   rc += seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(write), 0);
+
+   if (rc != 0) {
+      #ifdef DEBUG
+      perror("seccomp_rule_add failed");
+      #endif
+      return;
+   }   
+
+   // load the filter
+   seccomp_load(ctx);
+   if (rc != 0) {
+      #ifdef DEBUG
+      perror("seccomp_load failed");
+      #endif
+      return;
+   }
+
+   
    token_type next_token;
 
    while (1)

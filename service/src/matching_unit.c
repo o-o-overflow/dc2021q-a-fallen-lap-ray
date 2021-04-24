@@ -2,6 +2,13 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
+#include <linux/audit.h>
+#include <linux/filter.h>
+#include <linux/seccomp.h>
+
+#include <seccomp.h> /* libseccomp */
+
+
 #include "types.h"
 #include "matching_unit.h"
 #include "queue.h"
@@ -58,6 +65,34 @@ ready_token_pair_type ready_token_pair_from_tokens(token_type token_1, token_typ
 
 void run_matching_unit(queue* incoming_token_queue, queue* ready_token_pair_queue, uint32_t max_table_size)
 {
+
+   // set up seccomp
+   scmp_filter_ctx ctx;
+   int rc = 0;
+
+   ctx = seccomp_init(SCMP_ACT_KILL); // default action: kill
+   rc += seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(rt_sigreturn), 0);
+   rc += seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(exit), 0);
+   rc += seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(futex), 0);
+   rc += seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(brk), 0);
+
+   if (rc != 0) {
+      #ifdef DEBUG
+      perror("seccomp_rule_add failed");
+      #endif
+      return;
+   }   
+
+   // load the filter
+   seccomp_load(ctx);
+   if (rc != 0) {
+      #ifdef DEBUG
+      perror("seccomp_load failed");
+      #endif
+      return;
+   }
+   
+
    token_waiting_table = (token_waiting_table_type*)malloc(sizeof(token_waiting_table_type));
    token_waiting_table->num_elements = 0;
    token_waiting_table->table_size = max_table_size;

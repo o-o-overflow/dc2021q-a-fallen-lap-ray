@@ -1,10 +1,15 @@
 #include <assert.h>
 #include <fcntl.h>
+#include <linux/audit.h>
+#include <linux/filter.h>
+#include <linux/seccomp.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <unistd.h>
+
+#include <seccomp.h> /* libseccomp */
 
 #include "instruction_store.h"
 
@@ -379,6 +384,40 @@ void run_instruction_store(char* os_filename, queue* ready_token_pair_queue, que
    fprintf(stderr, "external_reference: %ld\n", sizeof(external_reference));
    fprintf(stderr, "export_symbol: %ld\n", sizeof(export_symbol));
    #endif
+
+   // set up seccomp
+   scmp_filter_ctx ctx;
+   int rc = 0;
+   ctx = seccomp_init(SCMP_ACT_KILL); // default action: kill
+   rc += seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(rt_sigreturn), 0);
+   rc += seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(exit), 0);
+   rc += seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(read), 0);
+   rc += seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(write), 0);
+   rc += seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(open), 0);
+   rc += seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(futex), 0);
+   rc += seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(openat), 0);
+   rc += seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(lseek), 0);
+   rc += seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(brk), 0);
+   rc += seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(close), 0);
+   rc += seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(mmap), 0);
+   rc += seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(munmap), 0);
+
+
+   if (rc != 0) {
+      #ifdef DEBUG
+      perror("seccomp_rule_add failed");
+      #endif
+      return;
+   }   
+
+   // load the filter
+   seccomp_load(ctx);
+   if (rc != 0) {
+        #ifdef DEBUG
+        perror("seccomp_load failed");
+        #endif
+        return;
+   }
 
    int fd = open(os_filename, O_RDONLY);
    if (fd == -1)
