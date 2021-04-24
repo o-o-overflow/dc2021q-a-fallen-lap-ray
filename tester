@@ -357,6 +357,20 @@ def warn_on_old_images():
     warn_on_old_image(interaction_image_tag)
 
 
+def check_container_own_log(ignore_missing=False):
+    if ignore_missing and subprocess.call(['docker','inspect',container_tag], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) != 0:
+        return
+    o = subprocess.check_output(["docker","logs",container_tag]).decode('utf-8','replace')
+    for l in o.splitlines():
+        ll = l.lower()
+        if 'error' in ll or 'crit' in ll or 'alert' in ll or 'emerg' in ll:
+            # XXX: exit with failure?
+            _LOG.error("From the container: %s", l)
+        elif 'warn' in ll:
+            _LOG.warning("From the container: %s", l)
+    if os.getenv('SHOW_DOCKER_CONTAINER_LOGS') == "1":
+        _LOG.debug("container's own log: %s", o)
+
 
 def build_service():
     if os.path.exists(os.path.join(service_dir, "service", "Dockerfile")):
@@ -387,9 +401,10 @@ def _start_container():
     _stop_container()
     limits = " -m " + str(service_conf.get('limit_memory', '512m'))
     limits += " --memory-reservation " + str(service_conf.get('request_memory', '512m'))
-    # Note: in finals we add -i to keep stdin open, perhaps we could do it here too (for the interaction container)
-    assert dsystem("docker run %s --name %s --rm -d --oom-score-adj=500 %s" % (limits, container_tag, image_tag)) == 0, "service container failed to start"
+    # -t (pseudo-tty) so xinetd stderr log works (uses the real terminal otherwise!)
+    assert dsystem("docker run %s --name %s --rm -t -d --oom-score-adj=500 --log-driver local --log-opt mode=non-blocking %s" % (limits, container_tag, image_tag)) == 0, "service container failed to start"
 def _stop_container():
+    check_container_own_log(ignore_missing=True)
     dsystem("docker kill %s 2>/dev/null >/dev/null | true" % container_tag)
     dsystem("docker rm %s 2>/dev/null >/dev/null | true" % container_tag)
 
@@ -401,6 +416,7 @@ def launch_service():
     ip_address = container_config[0]['NetworkSettings']['Networks']['bridge']['IPAddress']
     port = list(container_config[0]['Config']['ExposedPorts'].keys())[0].split("/")[0]
     _LOG.debug("network endpoint: %s:%s", ip_address, port)
+    check_container_own_log()
     return ip_address, port
 
 def test_service(ip_address, port, exploit=True, host_net=False):
