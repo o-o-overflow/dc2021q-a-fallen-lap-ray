@@ -61,7 +61,8 @@ healthcheck_tcp: Booting up IndustrialAutomaton
 
 # This is the number of concurrent connections that a container should be able to handle.
 # Also see xinetd's instances parameter
-concurrent_connections: 4
+# This can handle more, but exploitation is slow, don't want to mess up the tester
+concurrent_connections: 1
 shortread_allowed_diff: -1
 
 # Resource limits that will go in k8s
