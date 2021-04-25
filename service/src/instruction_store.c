@@ -321,11 +321,6 @@ loaded_code_info load_file(int fd, off_t file_size, bool is_privileged)
 	  {
 		 inst->literal_2 = result->current_destination;
 	  }
-      // BUG: undocumented functionality to change the opcode
-      if ((destination.flags.raw & 0x80) != 0)
-      {
-         inst->opcode = result->current_destination;
-      }
    }
 
    // Update our store with the exports.
@@ -477,6 +472,13 @@ void run_instruction_store(char* os_filename, queue* ready_token_pair_queue, que
 		 char* filename = (char*)&next.token_1.data;
 		 filename[7] = '\0';
 		 data_type arg = next.token_2.data;
+         bool is_privileged = false;
+
+         // the VM can execute privileged instructions for performance reasons
+         if (strcmp(filename, "vm") == 0)
+         {
+            is_privileged = true;
+         }
 
 		 int fd = open(filename, O_RDONLY);
 		 if (fd == -1)
@@ -493,7 +495,7 @@ void run_instruction_store(char* os_filename, queue* ready_token_pair_queue, que
 		 fprintf(stderr, "%s instruction filesize %ld\n", filename, file_size);
 		 #endif
 
-		 loaded_code_info result = load_file(fd, file_size, false);
+		 loaded_code_info result = load_file(fd, file_size, is_privileged);
 		 close(fd);
 		 if (result.error == -1)
 		 {

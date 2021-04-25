@@ -52,7 +52,7 @@ interactions:
 # Example: healthcheck_tcp: awesome chall
 #          healthcheck_tcp_send: some intial command
 # Example: healthcheck_http: Author Login
-healthcheck_tcp: Booting up IndustrialAutomaton
+healthcheck_tcp: Booting
 
 
 
