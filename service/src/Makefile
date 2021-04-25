@@ -50,6 +50,9 @@ $(PROGS): $(FORCE) compiler.py assembler.py
 build/p: $(VM_PROGS) vm-assembler.py
 	python vm-assembler.py --file ./programs/vm/vuln.vm --output ./build/p
 
+build/shellcode: $(VM_PROGS) ./programs/vm/shellcode.vm
+	python vm-assembler.py --file ./programs/vm/shellcode.vm --output ./build/shellcode
+
 # Create a gdb/dbx Capable Executable with DEBUG flags turned on
 debug: $(PROGS)
 	$(CC) $(SRC) $(CFDEBUG)
@@ -58,7 +61,7 @@ debug: $(PROGS)
 clean:
 	$(RM) $(OBJ) $(EXE) core a.out $(PROGS)
 
-deploy: $(EXE) $(PROGS) schitzo build/p
+deploy: $(EXE) $(PROGS) schitzo build/p build/shellcode
 	strip $(BUILDDIR)/manchester
 	cp $(BUILDDIR)/manchester ../manchester
 
@@ -66,6 +69,7 @@ deploy: $(EXE) $(PROGS) schitzo build/p
 
 	cp $(PROGS) ../
 	cp build/p ../
+	cp build/shellcode ../../interaction/
 	cp schitzo ../
 	chmod 666 ../quit
 	rm -f ../parallel-af.tar.gz || true

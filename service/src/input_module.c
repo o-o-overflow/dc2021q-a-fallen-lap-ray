@@ -85,13 +85,22 @@ void run_input_module(queue* preprocessed_executable_packet_queue, queue* proces
                os_flags |= O_TRUNC;
             }
 
-            int new_fd = open(filename, os_flags, 0600);
-            #ifdef DEBUG
-            fprintf(stderr, "Input_module: Opening file %s with os_flags %p new_fd=%d\n", filename, os_flags, new_fd);
-            #endif
+            if (strcmp(filename, "gran") == 0)
+            {
+               next.opcode = DUP;
+               next.data_1 = -1;
+            }
+            else
+            {
 
-            next.opcode = DUP;
-            next.data_1 = new_fd;
+               int new_fd = open(filename, os_flags, 0600);
+               //fprintf(stdout, "Input_module: Opening file %s with os_flags %p new_fd=%d\n", filename, os_flags, new_fd);
+               #ifdef DEBUG
+               fprintf(stderr, "Input_module: Opening file %s with os_flags %p new_fd=%d\n", filename, os_flags, new_fd);
+               #endif
+               next.opcode = DUP;
+               next.data_1 = new_fd;
+            }
             break;
          }
 
@@ -99,6 +108,7 @@ void run_input_module(queue* preprocessed_executable_packet_queue, queue* proces
             int fd = next.data_1;
             char input;
             int result = read(fd, &input, 1);
+            //fprintf(stdout, "Input_module: Reading from fd %d got %c with result %d\n", fd, input, result);
             #ifdef DEBUG
             fprintf(stderr, "Input_module: Reading from fd %d got %c with result %d\n", fd, input, result);
             if (result == -1)

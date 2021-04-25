@@ -13,12 +13,14 @@ add a c
 imm b 0x6761
 stm a b
 
-# Address of fname goes into a
-imm a 0
-add a s
+# Address of fname goes into b
+imm b 0
+add b s
 
-# flags in reg
-imm b 0x0
+# &flags in reg d
+imm d 0x0
+stk 0 d
+add d s
 
 sys open a
 

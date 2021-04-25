@@ -1,0 +1,20 @@
+start:
+imm a normal_str
+ldm b a
+imm a buf
+stm a b
+imm b buf
+# flags are located at flags
+imm d flags
+# len to read
+imm c 1
+imm a 0
+sys 0x3 d
+imm a start
+jmp 0 a
+
+.data
+buf "\x00"*8
+spacer "\x00"*16
+normal_str "alag\x00\x02\x00\x00"
+flags 0x00
