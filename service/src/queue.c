@@ -25,35 +25,47 @@ typedef struct {
 struct _queue {
    unsigned long max_count;
    unsigned int element_size;
+   int shmem_fd;
+   char ring_type;
    unsigned long max_size;
    char* name;
-   int shmem_fd;
    unsigned long mmap_size;
    sem_t* can_write_lock;
-   sem_t* can_read_lock;   
+   sem_t* can_read_lock;
    shared_queue* mem;
 };
 
-queue* queue_new(char* name, unsigned long max_count, unsigned int element_size)
+void my_memcpy(char* dst, char* src, unsigned long size)
 {
-   queue* to_return;
+   for (unsigned long i = 0; i < size; i++)
+   {
+      dst[i] = src[i];
+   }
+   return;
+}
 
-   to_return = (queue*)malloc(sizeof(queue));
-   to_return->max_count = max_count;
-   to_return->element_size = element_size;
-   to_return->max_size = max_count * element_size;
-   to_return->name = strdup(name);
-   to_return->mmap_size = to_return->max_size + sizeof(shared_queue) - 1;
+queue* queue_new(char* name, unsigned long max_count, unsigned int element_size, char ring_type, int* out_shmem_fd)
+{
+   char buf[40];
+   queue to_return;
+
+   to_return.ring_type = ring_type;
+   to_return.max_count = max_count;
+   to_return.element_size = element_size;
+   to_return.max_size = max_count * element_size;
+   strcpy(buf, name);
+   to_return.name = strdup(buf);
+   to_return.mmap_size = to_return.max_size + sizeof(shared_queue) - 1;
 
    // Create the shared memory region
-   if ((to_return->shmem_fd = shm_open(to_return->name, O_CREAT | O_EXCL | O_RDWR, S_IRUSR | S_IWUSR)) == -1)
+   if ((to_return.shmem_fd = shm_open(to_return.name, O_CREAT | O_EXCL | O_RDWR, S_IRUSR | S_IWUSR)) == -1)
    {
 	  #ifdef DEBUG
 	  perror("shm_open fail");
 	  #endif
 	  goto FAIL;
    }
-   if (shm_unlink(to_return->name) == -1)
+   if (shm_unlink(to_return.name) == -1)
    {
 	  #ifdef DEBUG
 	  perror("shm_unlink fail");
@@ -61,7 +73,7 @@ queue* queue_new(char* name, unsigned long max_count, unsigned int element_size)
 	  goto FAIL;
    }
 
-   if (ftruncate(to_return->shmem_fd, to_return->mmap_size) == -1)
+   if (ftruncate(to_return.shmem_fd, to_return.mmap_size) == -1)
    {
 	  #ifdef DEBUG
 	  perror("ftruncate fail");
@@ -70,7 +82,7 @@ queue* queue_new(char* name, unsigned long max_count, unsigned int element_size)
    }
 
    // Create the necessary semaphores
-   if ((to_return->can_write_lock = sem_open(name, O_CREAT, S_IRUSR | S_IWUSR, max_count)) == SEM_FAILED)
+   if ((to_return.can_write_lock = sem_open(name, O_CREAT, S_IRUSR | S_IWUSR, max_count)) == SEM_FAILED)
    {
 	  #ifdef DEBUG
 	  perror("sem_open");
@@ -86,7 +98,7 @@ queue* queue_new(char* name, unsigned long max_count, unsigned int element_size)
    }
 
    // Create the necessary semaphores
-   if ((to_return->can_read_lock = sem_open(name, O_CREAT, S_IRUSR | S_IWUSR, 0)) == SEM_FAILED)
+   if ((to_return.can_read_lock = sem_open(name, O_CREAT, S_IRUSR | S_IWUSR, 0)) == SEM_FAILED)
    {
 	  #ifdef DEBUG
 	  perror("sem_open");
@@ -102,7 +114,7 @@ queue* queue_new(char* name, unsigned long max_count, unsigned int element_size)
    }
    
 
-   if ((to_return->mem = (shared_queue*) mmap(NULL, to_return->mmap_size, PROT_READ | PROT_WRITE, MAP_SHARED, to_return->shmem_fd, 0)) == MAP_FAILED)
+   if ((to_return.mem = (shared_queue*) mmap(NULL, to_return.mmap_size, PROT_READ | PROT_WRITE, MAP_SHARED, to_return.shmem_fd, 0)) == MAP_FAILED)
    {
 	  #ifdef DEBUG
 	  perror("mmap fail");
@@ -110,29 +122,37 @@ queue* queue_new(char* name, unsigned long max_count, unsigned int element_size)
 	  goto FAIL;
    }
 
-   to_return->mem->head = to_return->mem->data;
-   to_return->mem->tail = to_return->mem->data;
+   to_return.mem->head = to_return.mem->data;
+   to_return.mem->tail = to_return.mem->data;
 
    {
 	  pthread_mutexattr_t attr;
 	  pthread_mutexattr_init(&attr);
 	  pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);
 	  // pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ADAPTIVE_NP);
-	  pthread_mutex_init(&to_return->mem->lock, &attr);
+	  pthread_mutex_init(&to_return.mem->lock, &attr);
 	  pthread_mutexattr_destroy(&attr);
    }
 
-   return to_return;
-
-  FAIL:
-   if (to_return->shmem_fd != -1)
+   // set the out param shared memory fd if it's not null
+   if (out_shmem_fd != NULL)
    {
-	  close(to_return->shmem_fd);
-	  shm_unlink(to_return->name);
+      *out_shmem_fd = to_return.shmem_fd;
    }
 
-   free(to_return->name);
-   free(to_return);
+   queue* ptr_to_return = (queue*)malloc(sizeof(queue));
+   my_memcpy((void*)ptr_to_return, (void*)&to_return, sizeof(queue));
+
+   return ptr_to_return;
+
+  FAIL:
+   if (to_return.shmem_fd != -1)
+   {
+	  close(to_return.shmem_fd);
+	  shm_unlink(to_return.name);
+   }
+
+   free(to_return.name);
    return NULL;
 }
 

@@ -1,4 +1,4 @@
-from --platform=linux/amd64 ubuntu:20.04
+from --platform=linux/amd64 ubuntu:18.04
 
 # example:
 run apt-get -qq update && apt-get install -qq --no-install-recommends xinetd sudo

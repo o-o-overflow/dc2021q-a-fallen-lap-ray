@@ -75,6 +75,10 @@ void run_matching_unit(queue* incoming_token_queue, queue* ready_token_pair_queu
    rc += seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(exit), 0);
    rc += seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(futex), 0);
    rc += seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(brk), 0);
+   #ifdef DEBUG
+   rc += seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(write), 0);
+   #endif
+
 
    if (rc != 0) {
       #ifdef DEBUG

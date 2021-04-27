@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -28,6 +29,8 @@ void run_array_module(queue* processed_executable_packet_queue, queue* post_arra
    rc += seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(futex), 0);
    rc += seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(brk), 0);
 
+   //rc += seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(write), 0);
+
 
    if (rc != 0) {
       #ifdef DEBUG
@@ -54,10 +57,14 @@ void run_array_module(queue* processed_executable_packet_queue, queue* post_arra
    {
       execution_packet next;
       queue_remove(processed_executable_packet_queue, &next, sizeof(execution_packet));
+      #ifdef DEBUG
+      assert(next.ring == RING_ONE);
+      #endif
 
       switch(next.opcode)
       {
          case NAR:
+            next.opcode = DUP;
             if (num_arrays == MAX_ARRAYS)
             {
                #ifdef DEBUG
@@ -85,19 +92,24 @@ void run_array_module(queue* processed_executable_packet_queue, queue* post_arra
 
             else
             {
+               if (num_arrays == 0)
+               {
+                  //printf("next: %p\n", &next);
+               }
                int current_array_num = num_arrays;
                num_arrays += 1;
 
                arrays[current_array_num] = malloc(next.data_1);
+               //fprintf(stderr, "%p\n", arrays[current_array_num]);
                array_size[current_array_num] = next.data_1;
-               next.opcode = DUP;
                next.data_1 = current_array_num;
             }
             break;
          case ARF:
          {
             data_type array_index = next.data_1;
-            data_type array_offset = next.data_2;
+            // should be able to make a negative offset
+            int64_t array_offset = (int64_t) next.data_2;
             if (array_index >= num_arrays)
             {
                #ifdef DEBUG
@@ -107,7 +119,9 @@ void run_array_module(queue* processed_executable_packet_queue, queue* post_arra
                next.data_1 = -1;
                break;
             }
-            data_type this_array_size = array_size[array_index];
+            int64_t this_array_size = (int64_t)array_size[array_index];
+            //printf("%d %d %d %d\n", array_index, array_offset, this_array_size, array_offset >= this_array_size);
+
             if (array_offset >= this_array_size)
             {
                #ifdef DEBUG
@@ -132,6 +146,7 @@ void run_array_module(queue* processed_executable_packet_queue, queue* post_arra
                .destination_2 = 0,
                .input = 0,
                .marker = ONE_OUTPUT_MARKER,
+               .ring = RING_ONE,
             };
 
             execution_packet value_packet = {
@@ -143,6 +158,7 @@ void run_array_module(queue* processed_executable_packet_queue, queue* post_arra
                .destination_2 = 0,
                .input = 0,
                .marker = ONE_OUTPUT_MARKER,
+               .ring = RING_ONE,
             };
 
             queue_add(post_array_packet_queue, &ref_packet, sizeof(execution_packet));
@@ -151,9 +167,10 @@ void run_array_module(queue* processed_executable_packet_queue, queue* post_arra
          }  
          case AST:
          {
+            next.opcode = DUP;
             uint64_t* ref = next.data_1;
             uint64_t value = next.data_2;
-            bool safe = 0;
+            bool safe = 1;
 
             for (int i = 0; i < num_arrays; i++)
             {
@@ -178,8 +195,8 @@ void run_array_module(queue* processed_executable_packet_queue, queue* post_arra
             }
 
             *ref = value;
-            next.opcode = DUP;
-            next.data_1 = 1;
+            //printf("%p: %d\n", ref, value);
+               // printf("%hhx %hhx %d\n", next.ring, next.opcode, next.data_1);
             break;
          }
          default:

@@ -22,10 +22,10 @@ EXE    = $(BUILDDIR)/manchester
 
 # Compiler, Linker Defines
 CC      = gcc
-CFLAGS  = -std=gnu11 -Wall -O2
+CFLAGS  = -std=gnu11 -Wall -O2 -fshort-enums
 LIBPATH = -L. 
 LDFLAGS = -o $(EXE) $(LIBPATH) $(LIBS)
-CFDEBUG = -std=gnu11 -Wall -g -DDEBUG $(LDFLAGS)
+CFDEBUG = -std=gnu11 -Wall -g -DDEBUG -fshort-enums -O2 $(LDFLAGS)
 RM      = /bin/rm -f
 
 .PHONY: clean deploy debug

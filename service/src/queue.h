@@ -6,7 +6,7 @@
 typedef struct _queue queue;
 
 /* Shared multi-process compatible queue */
-queue* queue_new(char* name, unsigned long max_count, unsigned int element_size);
+queue* queue_new(char* name, unsigned long max_count, unsigned int element_size, char ring_type, int* out_shmem_fd);
 void queue_free(queue* ptr);
 
 bool queue_add(queue* ptr, void* element, unsigned int len);

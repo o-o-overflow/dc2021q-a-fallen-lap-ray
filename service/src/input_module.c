@@ -14,7 +14,19 @@
 
 #include "input_module.h"
 
-void run_input_module(queue* preprocessed_executable_packet_queue, queue* processed_executable_packet_queue)
+void redact_filename(char* filename)
+{
+   int len = strlen(filename);
+   for (int i = 0; i < len; i++)
+   {
+      if (filename[i] == '.' || filename[i] == '/')
+      {
+         filename[i] = '_';
+      }
+   }
+}
+
+void run_input_module(queue* preprocessed_executable_packet_queue, queue* processed_executable_packet_queue, int max_shared_fd)
 {
    // set up seccomp
    scmp_filter_ctx ctx;
@@ -61,6 +73,9 @@ void run_input_module(queue* preprocessed_executable_packet_queue, queue* proces
             strncpy(filename, (char*)&next.data_1, 8);
             filename[8] = '\0';
 
+            redact_filename(filename);
+            //printf("%s\n", filename);
+
             int os_flags = 0;
 
             if (FLAG_TO_RW_MODE(machine_flags) == FILE_READ_ONLY)
@@ -85,7 +100,7 @@ void run_input_module(queue* preprocessed_executable_packet_queue, queue* proces
                os_flags |= O_TRUNC;
             }
 
-            if (strcmp(filename, "gran") == 0)
+            if (strcmp(filename, "gran") == 0 && (next.ring != RING_ZERO))
             {
                next.opcode = DUP;
                next.data_1 = -1;
@@ -107,15 +122,29 @@ void run_input_module(queue* preprocessed_executable_packet_queue, queue* proces
          case RED: {
             int fd = next.data_1;
             char input;
-            int result = read(fd, &input, 1);
-            //fprintf(stdout, "Input_module: Reading from fd %d got %c with result %d\n", fd, input, result);
-            #ifdef DEBUG
-            fprintf(stderr, "Input_module: Reading from fd %d got %c with result %d\n", fd, input, result);
-            if (result == -1)
+
+            int result;
+            
+            // Check the FD, can't read from an FD that's between 2 and max_shared_fd
+            if (fd > 2 && fd <= max_shared_fd && next.ring != RING_ZERO)
             {
-               perror("read fail");
+               #ifdef DEBUG
+               fprintf(stderr, "Input_module: Reading from fd %d in ring %d not allowed\n", fd, next.ring);
+               #endif
+               result = -1;
             }
-            #endif
+            else
+            {
+               result = read(fd, &input, 1);
+               #ifdef DEBUG
+               fprintf(stderr, "Input_module: Reading from fd %d got %c with result %d\n", fd, input, result);
+               if (result == -1)
+               {
+                  perror("read fail");
+               }
+               #endif
+            }
+            //fprintf(stdout, "Input_module: Reading from fd %d got %d with result %d\n", fd, input, result);
 
             next.opcode = DUP;
             if (result == 1)
@@ -132,7 +161,29 @@ void run_input_module(queue* preprocessed_executable_packet_queue, queue* proces
          case WRT: {
             int fd = next.data_1;
             char to_write = next.data_2;
-            int result = write(fd, &to_write, 1);
+            char result;
+            
+            // Check the FD, can't write to an FD that's between 2 and max_shared_fd
+            if (fd > 2 && fd <= max_shared_fd && next.ring != RING_ZERO)
+            {
+               #ifdef DEBUG
+               fprintf(stderr, "Input_module: Reading from fd %d in ring %d not allowed\n", fd, next.ring);
+               #endif
+
+               result = -1;
+            }
+            else
+            {
+               result = write(fd, &to_write, 1);
+               #ifdef DEBUG
+               fprintf(stderr, "Input_module: writing to fd %d with result %d\n", fd, result);
+               if (result == -1)
+               {
+                  perror("read fail");
+               }
+               #endif
+
+            }
             #ifdef DEBUG
             fprintf(stderr, "Input_module: Writing to fd %d a %c with result %d\n", fd, to_write, result);
             #endif
@@ -144,14 +195,26 @@ void run_input_module(queue* preprocessed_executable_packet_queue, queue* proces
             }
             else
             {
-               next.data_1 = FALSE;
+               next.data_1 = result;
             }
             break;
          }
 
          case CLS: {
             int fd = next.data_1;
-            int result = close(fd);
+            int result;
+            if (fd > 2 && fd <= max_shared_fd && next.ring != RING_ZERO)
+            {
+               #ifdef DEBUG
+               fprintf(stderr, "Input_module: Closing fd %d in ring %d not allowed\n", fd, next.ring);
+               #endif
+
+               result = -1;
+            }
+            else
+            {
+               result = close(fd);
+            }
             #ifdef DEBUG
             fprintf(stderr, "Input_module: Closing fd %d with result %d\n", fd, result);
             #endif
@@ -163,7 +226,7 @@ void run_input_module(queue* preprocessed_executable_packet_queue, queue* proces
             }
             else
             {
-               next.data_1 = FALSE;
+               next.data_1 = result;
             }
             break;
          }
@@ -177,7 +240,21 @@ void run_input_module(queue* preprocessed_executable_packet_queue, queue* proces
             int in_fd = next.data_1;
             int out_fd = next.data_2;
             char input;
-            int result = read(in_fd, &input, 1);
+            int result;
+            
+            if ((in_fd > 2 && in_fd <= max_shared_fd && next.ring != RING_ZERO) ||
+                (out_fd > 2 && out_fd <= max_shared_fd && next.ring != RING_ZERO))
+            {
+               #ifdef DEBUG
+               fprintf(stderr, "Input_module: sending file from fd %d to fd %d in ring %d not allowed\n", in_fd, out_fd, next.ring);
+               #endif
+
+               result = -1;
+            }
+            else
+            {
+               result = read(in_fd, &input, 1);
+            }
             while (result == 1)
             {
                result = write(out_fd, &input, 1);
@@ -211,7 +288,19 @@ void run_input_module(queue* preprocessed_executable_packet_queue, queue* proces
          case LSK: {
             int fd = next.data_1;
             off_t offset = next.data_2;
-            off_t result = lseek(fd, offset, SEEK_SET);
+            off_t result;
+            if (fd > 2 && fd <= max_shared_fd && next.ring != RING_ZERO)
+            {
+               #ifdef DEBUG
+               fprintf(stderr, "Input_module: lseek on fd %d in ring %d not allowed\n", fd, next.ring);
+               #endif
+
+               result = -1;
+            }
+            else
+            {
+               result = lseek(fd, offset, SEEK_SET);
+            }
 
             #ifdef DEBUG
             fprintf(stderr, "Input_module: lseek fd %d offset %d result %d\n", fd, offset, result);

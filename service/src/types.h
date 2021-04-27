@@ -4,21 +4,28 @@
 #include <stdint.h>
 #include <stdio.h>
 
-typedef enum {ADD,
+typedef enum {NEG,
+			  DUP,
+			  NTG, /* new tag */
+			  ITG, /* iterate tag */
+			  MER, /* iterate tag */
+			  ETG, /* extract tag */
+			  RED,
+			  CLS,
+			  HLT,
+			  LS,
+              ULK, /* unlink */
+              RND, /* Random */
+              NAR, /* New Array */
 			  SUB,
 			  BRR,
 			  LT,
 			  EQ,
-			  DUP,
-			  NEG,
-			  MER,
-			  NTG, /* new tag */
-			  ITG, /* iterate tag */
+              ADD,
 			  GT,
 			  SIL, /* set iteration level */
 			  CTG, /* copy tag */
 			  RTD, /* return to destination */
-			  ETG, /* extract tag */
 			  MUL, /* multiply */
 			  XOR,
 			  AND,
@@ -27,19 +34,12 @@ typedef enum {ADD,
 			  SHR,
 			  NEQ,
 			  OPN,
-			  RED,
 			  WRT,
-			  CLS,
 			  GTE,
 			  LTE,
-			  HLT,
 			  LOD,
-			  LS,
               SDF, /* sendfile */
-              ULK, /* unlink */
               LSK, /* lseek */
-              RND, /* Random */
-              NAR, /* New Array */
               ARF, /* Array Reference */
               AST, /* Array Set */
               MOD, /* MOD operator % */
@@ -95,15 +95,17 @@ typedef uint32_t destination_type;
 #define ONE_OUTPUT_MARKER 0
 typedef uint8_t marker_type;
 
+typedef uint8_t ring_type;
+
 typedef enum {NONE, ONE, TWO} instruction_literal_type;
 
 typedef struct {
    opcode_type opcode;
-   destination_type destination_1;
    destination_type destination_2;
+   destination_type destination_1;
    marker_type marker;
-   data_type literal_1;
    data_type literal_2;
+   data_type literal_1;
    instruction_literal_type instruction_literal;
 } instruction;
 
@@ -116,22 +118,26 @@ typedef struct {
 #define DEREGISTER_INPUT_HANDLER_DESTINATION CREATE_DESTINATION(((1<<28)-4), 0, MATCHING_ONE)
 #define DEV_NULL_DESTINATION CREATE_DESTINATION(((1<<28)-5), 0, MATCHING_ONE)
 
+#define RING_ONE 1
+#define RING_ZERO 0
+
 typedef struct {
+   destination_type input;
+   marker_type marker;
+   ring_type ring;
+   opcode_type opcode;
    data_type data_1;
    data_type data_2;
-   opcode_type opcode;
    tag_type tag;   
    destination_type destination_1;
    destination_type destination_2;
-   destination_type input;
-   marker_type marker;
-} execution_packet;
+}  execution_packet;
 
 
 typedef struct {
    destination_type destination;
-   data_type data;
    tag_type tag;
+   data_type data;
 } token_type;
 
 typedef struct {
@@ -141,8 +147,8 @@ typedef struct {
 
 typedef struct {
    token_type output_1;
-   token_type output_2;
    marker_type marker;
+   token_type output_2;
 } execution_result;
 
 #ifdef DEBUG

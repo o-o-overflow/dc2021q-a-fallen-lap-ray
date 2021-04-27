@@ -12,6 +12,6 @@
 #define FILE_CREATE 0x10
 #define FILE_TRUNCATE 0x20
 
-void run_input_module(queue* preprocessed_executable_packet_queue, queue* processed_executable_packet_queue);
+void run_input_module(queue* preprocessed_executable_packet_queue, queue* processed_executable_packet_queue, int max_shared_fd);
 
 #endif /* INPUT_MODULE_H */

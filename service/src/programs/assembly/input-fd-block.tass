@@ -1,0 +1,5 @@
+input_byte = RED 4
+OUTD input_byte
+
+output = WRT 5 10
+OUTD output

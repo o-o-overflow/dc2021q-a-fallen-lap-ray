@@ -48,6 +48,7 @@ void add_ready_instructions(instruction* instructions, uint32_t num_instructions
 			.destination_2 = inst.destination_2,
             .input = CREATE_DESTINATION(i, 0, 0),
 			.marker = inst.marker,
+            .ring = RING_ONE,
 		 };
 		 queue_add(executable_packet_queue, &ready, sizeof(execution_packet));
 	  }
@@ -63,6 +64,7 @@ void add_ready_instructions(instruction* instructions, uint32_t num_instructions
 			.destination_2 = inst.destination_2,
             .input = CREATE_DESTINATION(i, 0, 0),
 			.marker = inst.marker,
+            .ring = RING_ONE,
 		 };
 		 queue_add(executable_packet_queue, &ready, sizeof(execution_packet));
 	  }
@@ -538,6 +540,7 @@ void run_instruction_store(char* os_filename, queue* ready_token_pair_queue, que
 				  .destination_2 = DEV_NULL_DESTINATION,
                   .input = CREATE_DESTINATION(address, 0, 0),
 				  .marker = ONE_OUTPUT_MARKER,
+                  .ring = RING_ONE,
 			   };
 			   queue_add(executable_packet_queue, &arg_packet, sizeof(execution_packet));
 
@@ -551,6 +554,7 @@ void run_instruction_store(char* os_filename, queue* ready_token_pair_queue, que
 				  .destination_2 = DEV_NULL_DESTINATION,
                   .input = CREATE_DESTINATION(address, 0, 0),
 				  .marker = ONE_OUTPUT_MARKER,
+                  .ring = RING_ONE,
 			   };
 			   queue_add(executable_packet_queue, &return_loc, sizeof(execution_packet));
 			}
@@ -570,6 +574,7 @@ void run_instruction_store(char* os_filename, queue* ready_token_pair_queue, que
 				  .destination_2 = inst.destination_2,
                   .input = CREATE_DESTINATION(address, 0, 0),
 				  .marker = inst.marker,
+                  .ring = RING_ONE,
 			   };
 			   queue_add(executable_packet_queue, &error_packet, sizeof(execution_packet));
 			   continue;
@@ -604,6 +609,7 @@ void run_instruction_store(char* os_filename, queue* ready_token_pair_queue, que
 			.destination_2 = inst.destination_2,
             .input = CREATE_DESTINATION(address, 0, 0),
 			.marker = inst.marker,
+            .ring = RING_ONE,
 		 };
 		 queue_add(executable_packet_queue, &ready, sizeof(execution_packet));
 	  }
@@ -618,6 +624,7 @@ void run_instruction_store(char* os_filename, queue* ready_token_pair_queue, que
 			.destination_2 = inst.destination_2,
             .input = CREATE_DESTINATION(address, 0, 0),
 			.marker = inst.marker,
+            .ring = RING_ONE,
 		 };
 		 queue_add(executable_packet_queue, &ready, sizeof(execution_packet));
 	  }

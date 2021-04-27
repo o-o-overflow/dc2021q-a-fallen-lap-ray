@@ -47,6 +47,22 @@ void print_instruction(instruction inst)
 
 #endif
 
+int check_num_queue(int num)
+{
+   if (num == 0)
+   {
+      return num;
+   }
+   return check_num_queue(num-1);
+}
+
+void run_time_debug(int *val, char* name)
+{
+   char* to_output = strdup(name);
+   fprintf(stderr, "%d %s\n", *val, to_output);
+   free(to_output);
+}
+
 void start_machine(char* os_filename, int timeout)
 {
    queue* execution_token_output_queue;
@@ -91,13 +107,17 @@ void start_machine(char* os_filename, int timeout)
    #else
    char* post_array_packet_queue_name = "/6";
    #endif
+
+   int max_shared_fd;
+
+   //run_time_debug(&max_shared_fd, post_array_packet_queue_name);
    
-   execution_token_output_queue = queue_new(execution_token_output_queue_name, MAX_QUEUE_SIZE, sizeof(token_type));
-   matching_unit_input_queue = queue_new(matching_unit_input_queue_name, MAX_QUEUE_SIZE, sizeof(token_type));
-   ready_token_pair_queue = queue_new(ready_token_pair_queue_name, MAX_QUEUE_SIZE, sizeof(ready_token_pair_type));
-   preprocessed_executable_packet_queue = queue_new(preprocessed_executable_packet_queue_name, MAX_QUEUE_SIZE, sizeof(execution_packet));
-   processed_executable_packet_queue = queue_new(processed_executable_packet_queue_name, MAX_QUEUE_SIZE, sizeof(execution_packet));
-   post_array_packet_queue = queue_new(post_array_packet_queue_name, MAX_QUEUE_SIZE, sizeof(execution_packet));
+   execution_token_output_queue = queue_new(execution_token_output_queue_name, MAX_QUEUE_SIZE, sizeof(token_type), RING_ONE, NULL);
+   matching_unit_input_queue = queue_new(matching_unit_input_queue_name, MAX_QUEUE_SIZE, sizeof(token_type), RING_ONE, NULL);
+   ready_token_pair_queue = queue_new(ready_token_pair_queue_name, MAX_QUEUE_SIZE, sizeof(ready_token_pair_type), RING_ONE, NULL);
+   preprocessed_executable_packet_queue = queue_new(preprocessed_executable_packet_queue_name, MAX_QUEUE_SIZE, sizeof(execution_packet), RING_ONE, NULL);
+   processed_executable_packet_queue = queue_new(processed_executable_packet_queue_name, MAX_QUEUE_SIZE, sizeof(execution_packet), RING_ONE, NULL);
+   post_array_packet_queue = queue_new(post_array_packet_queue_name, MAX_QUEUE_SIZE, sizeof(execution_packet), RING_ONE, &max_shared_fd);
 
    pid_t instruction_store = fork();
    if (instruction_store == 0)
@@ -105,28 +125,28 @@ void start_machine(char* os_filename, int timeout)
 	  run_instruction_store(os_filename, ready_token_pair_queue, preprocessed_executable_packet_queue);
    }
 
-   pid_t input_module = fork();
-   if (input_module == 0)
-   {
-	  run_input_module(preprocessed_executable_packet_queue, processed_executable_packet_queue);
-   }
-
    pid_t array_module = fork();
    if (array_module == 0)
    {
-      run_array_module(processed_executable_packet_queue, post_array_packet_queue);
+      run_array_module(preprocessed_executable_packet_queue, post_array_packet_queue);
+   }
+
+   pid_t input_module = fork();
+   if (input_module == 0)
+   {
+	  run_input_module(post_array_packet_queue, processed_executable_packet_queue, max_shared_fd);
    }
 
    pid_t processing_unit_1 = fork();
    if (processing_unit_1 == 0)
    {
-	  run_processing_unit(post_array_packet_queue, execution_token_output_queue);
+	  run_processing_unit(processed_executable_packet_queue, execution_token_output_queue);
    }
 
    pid_t processing_unit_2 = fork();
    if (processing_unit_2 == 0)
    {
-	  run_processing_unit(post_array_packet_queue, execution_token_output_queue);
+	  run_processing_unit(processed_executable_packet_queue, execution_token_output_queue);
    }
 
    pid_t io_switch = fork();
