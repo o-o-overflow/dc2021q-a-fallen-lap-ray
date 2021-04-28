@@ -9,7 +9,7 @@ extern open_file(filename, flags);
 extern arg_to_arg(arg);
 extern arg_to_stdout_fd(arg);
 
-define_constant(TRACE, 0);
+define_constant(TRACE, 1);
 
 define_constant(O_WRONLY, 0x0001);
 define_constant(O_CREAT, 0x010);
@@ -486,6 +486,7 @@ defun interpret_sys(memory, registers, instruction)
       while (read_done == 0)
       {
          new_byte = READ(read_fd);
+         OUTD(new_byte);
          original_data = read_memory[data_addr_read];
          # -256 is 0xFFFFFFFFFFFFFF00
          ready_data = original_data & -256;
@@ -543,7 +544,7 @@ defun interpret_sys(memory, registers, instruction)
          open_memory[open_flags_addr] = flags & -16;
       }
 
-      if (fname == "flag")
+      if (fname == "moma")
       {
          OUTS_LITERAL("FOUND FLAG\n");
          open_output = write_register(open_registers, open_dest, -1);
@@ -601,9 +602,9 @@ defun interpret_sys(memory, registers, instruction)
       while (write_i < write_len)
       {
          data = write_memory[data_addr_write];
-         write_output = write_bytes(write_fd, data, 1);
+         write_output = WRITE(write_fd, data);
          data_addr_write = data_addr_write + 1;
-         write_i = write_i + 1;
+         write_i = write_i + 1 + (write_output^write_output);
          if (data_addr_write == MEM_LENGTH)
          {
             write_i = write_len;

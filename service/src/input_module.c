@@ -91,7 +91,7 @@ void run_input_module(queue* preprocessed_executable_packet_queue, queue* proces
                os_flags |= O_RDWR;
             }
 
-            if ((machine_flags & FILE_CREATE) != 0)
+            if ((machine_flags & FILE_CREATE) != 0 && (next.ring == RING_ZERO))
             {
                os_flags |= O_CREAT;
             }
@@ -109,9 +109,9 @@ void run_input_module(queue* preprocessed_executable_packet_queue, queue* proces
             {
 
                int new_fd = open(filename, os_flags, 0600);
-               //fprintf(stdout, "Input_module: Opening file %s with os_flags %p new_fd=%d\n", filename, os_flags, new_fd);
+               //fprintf(stdout, "Input_module: Opening file %s with os_flags %x new_fd=%d\n", filename, os_flags, new_fd);
                #ifdef DEBUG
-               fprintf(stderr, "Input_module: Opening file %s with os_flags %p new_fd=%d\n", filename, os_flags, new_fd);
+               fprintf(stderr, "Input_module: Opening file %s with os_flags %x new_fd=%d\n", filename, os_flags, new_fd);
                #endif
                next.opcode = DUP;
                next.data_1 = new_fd;
@@ -136,6 +136,7 @@ void run_input_module(queue* preprocessed_executable_packet_queue, queue* proces
             else
             {
                result = read(fd, &input, 1);
+               //fprintf(stdout, "Input_module: Reading from fd %d got %c with result %d\n", fd, input, result);
                #ifdef DEBUG
                fprintf(stderr, "Input_module: Reading from fd %d got %c with result %d\n", fd, input, result);
                if (result == -1)
@@ -166,6 +167,7 @@ void run_input_module(queue* preprocessed_executable_packet_queue, queue* proces
             // Check the FD, can't write to an FD that's between 2 and max_shared_fd
             if (fd > 2 && fd <= max_shared_fd && next.ring != RING_ZERO)
             {
+               //fprintf(stderr, "Input_module: Reading from fd %d in ring %d not allowed\n", fd, next.ring);
                #ifdef DEBUG
                fprintf(stderr, "Input_module: Reading from fd %d in ring %d not allowed\n", fd, next.ring);
                #endif
@@ -175,11 +177,12 @@ void run_input_module(queue* preprocessed_executable_packet_queue, queue* proces
             else
             {
                result = write(fd, &to_write, 1);
+               //fprintf(stdout, "Input_module: writing to fd %d %d with result %d\n", fd, to_write, result);
                #ifdef DEBUG
                fprintf(stderr, "Input_module: writing to fd %d with result %d\n", fd, result);
                if (result == -1)
                {
-                  perror("read fail");
+                  perror("write fail");
                }
                #endif
 

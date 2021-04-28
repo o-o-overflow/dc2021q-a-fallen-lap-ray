@@ -40,8 +40,7 @@ sys open a
 # read and write from the fd
 
 # buf in b
-imm b 0
-add b s
+imm b 1000
 
 # len in c
 imm c 0xff

@@ -4,7 +4,7 @@ exec 2>/dev/null
 
 # create a temp directory for this connection
 TEMP_DIR=$(mktemp -d)
-chmod o+rwx "$TEMP_DIR"
+chmod o+rx "$TEMP_DIR"
 
 cleanup() {
     rm -rf "$TEMP_DIR"

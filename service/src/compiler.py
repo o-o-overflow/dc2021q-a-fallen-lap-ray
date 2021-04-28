@@ -203,7 +203,7 @@ class GenerateAssemblyPass(lark.visitors.Interpreter):
         past_variables = self.variables.copy()
 
         branch_variables = dict()
-        for var in used_variables:
+        for var in sorted(list(used_variables)):
             current_var = self.variables[var]
             true_var = f"_{var}{self._new_temp_variable()}_true"
             false_var = f"_{var}{self._new_temp_variable()}_false"
@@ -232,7 +232,7 @@ class GenerateAssemblyPass(lark.visitors.Interpreter):
 
         self.variables = past_variables.copy()
         # Set up all the variables for the false branch
-        for var in used_variables:
+        for var in sorted(list(used_variables)):
             false_var = branch_variables[var][1]
             self.variables[var] = false_var
 
@@ -246,7 +246,7 @@ class GenerateAssemblyPass(lark.visitors.Interpreter):
         new_variables = set(after_false_variables.keys())
         new_variables.update(after_true_variables.keys())
 
-        for var in new_variables:
+        for var in sorted(list(new_variables)):
             if var in after_true_variables and var in after_false_variables:
                 true_name = after_true_variables[var]
                 false_name = after_false_variables[var]
@@ -270,7 +270,11 @@ class GenerateAssemblyPass(lark.visitors.Interpreter):
         
         used_variables = set(UsedVariablesPass().transform(tree.children[0]))
         used_variables.update(UsedVariablesPass().transform(tree.children[1]))
-        for var in used_variables:
+
+        # we don't have to handle any constant variables
+        used_variables = list(filter(lambda var: not var in self.constant_variables, used_variables))
+
+        for var in sorted(list(used_variables)):
             if not var in prior_variables:
                 prior_variables[var] = f"_{var}_not_defined_before_loop{self._new_temp_variable()}"
                 undefined_before_loop.add(var)
@@ -283,7 +287,7 @@ class GenerateAssemblyPass(lark.visitors.Interpreter):
 
         a_used_variable = None
 
-        for var in used_variables:
+        for var in sorted(list(used_variables)):
             prior_name = prior_variables[var]
 
             if not a_used_variable and not var in undefined_before_loop:
@@ -328,7 +332,7 @@ class GenerateAssemblyPass(lark.visitors.Interpreter):
         self.current_conditional_true_var = None
 
         # create the output BRRs
-        for var in used_variables:
+        for var in sorted(list(used_variables)):
             prior_name, start_name, last_value_name, again_name, end_name = loop_variables[var]
             tmp_true_name = f"_{var}_true{self._new_temp_variable()}"
             tmp_false_name = f"_{var}_false{self._new_temp_variable()}"
@@ -347,7 +351,7 @@ class GenerateAssemblyPass(lark.visitors.Interpreter):
         self.visit(tree.children[1])
         # connect the variables that are at the end of the loop body
         # to the start of the loop
-        for var in used_variables:
+        for var in sorted(list(used_variables)):
             end_of_body_name = self.variables[var]
             prior_name, start_name, last_value_name, again_name, end_name = loop_variables[var]
             self.to_return += f"{last_value_name} = DUP {end_of_body_name}\n"
@@ -409,7 +413,7 @@ class GenerateAssemblyPass(lark.visitors.Interpreter):
         # Merge all the possible returns.
         prior_return = self.return_variables.pop()
 
-        for return_var in self.return_variables:
+        for return_var in sorted(list(self.return_variables)):
             new_return = self._new_temp_variable()
             self.to_return += f"{new_return} = MER {prior_return} {return_var}\n"
             prior_return = new_return

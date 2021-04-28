@@ -1,0 +1,8 @@
+define_constant(MEM_LENGTH, 4096);
+
+i = 0;
+while(i < 10)
+{
+   OUTD(MEM_LENGTH);
+   i = i + 1;
+}

@@ -1,0 +1,33 @@
+# read in one byte that's how much they want to write
+# then shellcode
+# shellcode will be loaded at address 100, and stack will be at 3000
+# reset the stack
+imm s 4092
+imm b 0
+stk 0 b
+add b s
+
+# len in c
+imm c 1
+
+# fd in a
+imm a 0
+
+sys read a
+
+# read it all into address 100, then jump there
+
+# num to read is in c
+ldm c b
+
+imm b 100
+
+imm a 0
+sys read a
+
+# change stack to be at 3000
+imm s 3000
+
+# jump to 100
+imm a 100
+jmp 0 a
