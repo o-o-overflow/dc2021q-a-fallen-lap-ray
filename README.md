@@ -1,7 +1,7 @@
 
 # {baby,mama,gran}-a-fallen-lap-ray DEFCON 2021 Quals
 
-![a-fallen-lap-ray=parallel-af-yan](./images/name.gif "a-fallen-lap-ray=parallel-af-yan")
+![a-fallen-lap-ray=parallel-af-yan](./name.gif "a-fallen-lap-ray=parallel-af-yan")
 
 This challenge is an implementation of the
 [pwn.college "Yan85" vm](https://pwn.college/modules/reversing)
