@@ -10,7 +10,8 @@ written on top of the [Manchester parallel machine](https://github.com/o-o-overf
 Authors: [adamd](https://twitter.com/adamdoupe) and
 [Zardus](https://twitter.com/Zardus) (even though Zardus wrote zero
 lines of code he insipred this challenge and acted as my rubber ducky
-constantly during development.
+constantly during development, so in true academic spirit he should
+get credit as well, but none of the blame).
 
 
 ## Challenge Conception/Idea
