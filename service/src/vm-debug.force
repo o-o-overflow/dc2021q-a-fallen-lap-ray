@@ -174,12 +174,13 @@ defun read_register(registers, reg_spec)
 
 defun read_memory(memory, address)
 {
-   return memory[address];
+   result = memory[address % MEM_LENGTH];
+   return result;
 }
 
 defun write_memory(memory, address, value)
 {
-   memory[address] = value;
+   memory[address % MEM_LENGTH] = value;
    return value;
 }
 
@@ -453,9 +454,9 @@ defun interpret_sys(memory, registers, instruction)
    arg1 = (instruction & INST_ARG1_MASK) >> INST_ARG1_SHIFT;
    arg2 = (instruction & INST_ARG2_MASK) >> INST_ARG2_SHIFT;
    reg_a = registers[REG_A];
-   reg_b = registers[REG_B];
+   reg_b = registers[REG_B] % MEM_LENGTH;
    reg_c = registers[REG_C];
-   reg_d = registers[REG_D];
+   reg_d = registers[REG_D] % MEM_LENGTH;
 
    if (TRACE)
    {
@@ -544,7 +545,7 @@ defun interpret_sys(memory, registers, instruction)
          open_memory[open_flags_addr] = flags & -16;
       }
 
-      if (fname == "moma")
+      if ((fname == "flag") | (fname == "os") | (fname == "self"))
       {
          OUTS_LITERAL("FOUND FLAG\n");
          open_output = write_register(open_registers, open_dest, -1);
@@ -552,7 +553,7 @@ defun interpret_sys(memory, registers, instruction)
       else
       {
 
-         fname = open_memory[open_fname_addr];
+         fname = open_memory[open_fname_addr % MEM_LENGTH];
          // if I add stuff here then I can fuck with the flags, but what?
          //open_flags_addr = read_register(open_registers, SPEC_REG_D);
          //if ((open_flags_addr < 0) | (open_flags_addr > MEM_LENGTH))
@@ -565,7 +566,7 @@ defun interpret_sys(memory, registers, instruction)
          //open_registers = open_registers+(open_registers^open_registers);
          //open_flags_addr = read_register(open_registers, SPEC_REG_D);
          //}
-
+         open_memory = open_memory + (open_memory^open_memory);
          flags = open_memory[open_flags_addr];
 
          open_output = OPEN(fname, flags);

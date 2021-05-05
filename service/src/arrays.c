@@ -94,7 +94,7 @@ void run_array_module(queue* processed_executable_packet_queue, queue* post_arra
             {
                if (num_arrays == 0)
                {
-                  //printf("next: %p\n", &next);
+                  //printf("next: %p next.ring: %p\n", &next, &next.ring);
                }
                int current_array_num = num_arrays;
                num_arrays += 1;
@@ -196,7 +196,7 @@ void run_array_module(queue* processed_executable_packet_queue, queue* post_arra
 
             *ref = value;
             //printf("%p: %d\n", ref, value);
-               // printf("%hhx %hhx %d\n", next.ring, next.opcode, next.data_1);
+            //printf("%p %hhx %hhx %d\n", &next.ring, next.ring, next.opcode, next.data_1);
             break;
          }
          default:

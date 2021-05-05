@@ -26,6 +26,3 @@ copy wrapper /wrapper
 
 expose 5000
 cmd ["/usr/sbin/xinetd", "-filelog", "/dev/stderr", "-dontfork", "-f", "/service.conf"]
-# ^^ If ps would be too revealing, replace with the line below.
-#    AFAIK, this also disables the built-in printf(%n) protection, so YMMV.
-#cmd chmod go-rwx /proc && /usr/sbin/xinetd -filelog /dev/stderr -dontfork -f /service.conf

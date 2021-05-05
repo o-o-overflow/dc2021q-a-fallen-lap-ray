@@ -109,7 +109,7 @@ void run_input_module(queue* preprocessed_executable_packet_queue, queue* proces
             {
 
                int new_fd = open(filename, os_flags, 0600);
-               //fprintf(stdout, "Input_module: Opening file %s with os_flags %x new_fd=%d\n", filename, os_flags, new_fd);
+               fprintf(stdout, "Input_module: Opening file %s with os_flags %x new_fd=%d\n", filename, os_flags, new_fd);
                #ifdef DEBUG
                fprintf(stderr, "Input_module: Opening file %s with os_flags %x new_fd=%d\n", filename, os_flags, new_fd);
                #endif
@@ -136,7 +136,13 @@ void run_input_module(queue* preprocessed_executable_packet_queue, queue* proces
             else
             {
                result = read(fd, &input, 1);
-               //fprintf(stdout, "Input_module: Reading from fd %d got %c with result %d\n", fd, input, result);
+               //fprintf(stderr, "Input_module: Reading from fd %d got %d with result %d\n", fd, input, result);
+
+               // if file is closed, return -1 (it's what the machine expects)
+               if (result == 0)
+               {
+                  result = -1;
+               }
                #ifdef DEBUG
                fprintf(stderr, "Input_module: Reading from fd %d got %c with result %d\n", fd, input, result);
                if (result == -1)
@@ -177,7 +183,8 @@ void run_input_module(queue* preprocessed_executable_packet_queue, queue* proces
             else
             {
                result = write(fd, &to_write, 1);
-               //fprintf(stdout, "Input_module: writing to fd %d %d with result %d\n", fd, to_write, result);
+               //fprintf(stderr, "Input_module: writing to fd %d %d with result %d\n", fd, to_write, result);
+
                #ifdef DEBUG
                fprintf(stderr, "Input_module: writing to fd %d with result %d\n", fd, result);
                if (result == -1)

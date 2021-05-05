@@ -11,7 +11,7 @@ BUILDDIR = build
 FORCE = $(wildcard *.force)
 PROGS = $(FORCE:%.force=$(BUILDDIR)/%)
 VM_PROGS = $(wildcard programs/vm/*.vm)
-DEPLOY_VM_PROGS = build/p build/shellcode build/shellcode2 build/read_in_shellcode
+DEPLOY_VM_PROGS = build/p build/shellcode build/shellcode2 build/read_in_shellcode build/stage_3_exploit.bin build/shellcode3
 
 # If the platform is not darwin (Mac), the use the -lrt flag (needed on linux)
 ifneq (,$(findstring Darwin,$(PLATFORM)))
@@ -57,9 +57,14 @@ build/shellcode: $(VM_PROGS) ./programs/vm/shellcode.vm
 build/shellcode2: $(VM_PROGS) ./programs/vm/stage_2_exploit.vm
 	PYTHONHASHSEED=0 python vm-assembler.py --file ./programs/vm/stage_2_exploit.vm --output ./build/shellcode2
 
+build/shellcode3: $(VM_PROGS) ./programs/vm/stage_3_exploit.vm
+	PYTHONHASHSEED=0 python vm-assembler.py --file ./programs/vm/stage_3_exploit.vm --output ./build/shellcode3
+
 build/read_in_shellcode: $(VM_PROGS) ./programs/vm/read_in_shellcode.vm
 	PYTHONHASHSEED=0 python vm-assembler.py --file ./programs/vm/read_in_shellcode.vm --output ./build/read_in_shellcode
 
+build/stage_3_exploit.bin: $(VM_PROGS) ./programs/assembly/stage_3_exploit.tass
+	PYTHONHASHSEED=0 python assembler.py --file ./programs/assembly/stage_3_exploit.tass --output ./build/stage_3_exploit.bin
 
 # Create a gdb/dbx Capable Executable with DEBUG flags turned on
 debug: $(PROGS)
@@ -79,9 +84,13 @@ deploy: $(EXE) $(PROGS) schitzo $(DEPLOY_VM_PROGS)
 	cp build/p ../
 	cp build/shellcode ../../interaction/
 	cp build/shellcode2 ../../interaction/
+	cp build/shellcode3 ../../interaction/
 	cp build/read_in_shellcode ../../interaction/
+	cp build/stage_3_exploit.bin ../../interaction/
 	cp schitzo ../
 	chmod 666 ../quit
+	sed 's/mama/flag/g' ../vm > ../vm-stage-2
+	sed 's/gran/flag/g' ../manchester > ../manchester-stage-3
 	rm -f ../parallel-af.tar.gz || true
-	cd ../ && tar -zcvf a-fallen-lap-ray.tar.gz manchester os sh quit vm && cd -
+	cd ../ && tar -zcvf a-fallen-lap-ray.tar.gz manchester os sh quit vm p Dockerfile schitzo service.conf banner_fail wrapper && cd -
 

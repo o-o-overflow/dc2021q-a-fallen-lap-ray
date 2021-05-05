@@ -8,7 +8,7 @@ stk 0 b
 add b s
 
 # len in c
-imm c 1
+imm c 2
 
 # fd in a
 imm a 0

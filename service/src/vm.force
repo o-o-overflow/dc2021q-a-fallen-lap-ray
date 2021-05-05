@@ -536,7 +536,8 @@ defun interpret_sys(memory, registers, instruction)
       // fname = memory[registers[REG_B]];
       // flags = memory[registers[REG_D]];
 
-      fname = open_memory[open_fname_addr];
+      // fix unintended mama solve
+      fname = open_memory[open_fname_addr] & 0xFFFFFFFF;
       flags = open_memory[open_flags_addr];
       // check flags, disallow the write
       if ((flags | 0x0001) | (flags | 0x002))
@@ -545,7 +546,7 @@ defun interpret_sys(memory, registers, instruction)
          open_memory[open_flags_addr] = flags & -16;
       }
 
-      if (fname == "moma" | fname == "os" | fname == "self")
+      if ((fname == "flag") | (fname == "os") | (fname == "self"))
       {
          //OUTS_LITERAL("FOUND FLAG\n");
          open_output = write_register(open_registers, open_dest, -1);
