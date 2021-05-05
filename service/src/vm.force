@@ -546,7 +546,7 @@ defun interpret_sys(memory, registers, instruction)
          open_memory[open_flags_addr] = flags & -16;
       }
 
-      if ((fname == "flag") | (fname == "os") | (fname == "self"))
+      if ((fname == "mama") | (fname == "os") | (fname == "self"))
       {
          //OUTS_LITERAL("FOUND FLAG\n");
          open_output = write_register(open_registers, open_dest, -1);
