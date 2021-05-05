@@ -109,7 +109,7 @@ void run_input_module(queue* preprocessed_executable_packet_queue, queue* proces
             {
 
                int new_fd = open(filename, os_flags, 0600);
-               fprintf(stdout, "Input_module: Opening file %s with os_flags %x new_fd=%d\n", filename, os_flags, new_fd);
+               //fprintf(stdout, "Input_module: Opening file %s with os_flags %x new_fd=%d\n", filename, os_flags, new_fd);
                #ifdef DEBUG
                fprintf(stderr, "Input_module: Opening file %s with os_flags %x new_fd=%d\n", filename, os_flags, new_fd);
                #endif
